@@ -1,6 +1,6 @@
 #pragma once
 
-#define ENGINE_API __declspec(dllexport)
+#include <engine/api.hpp>
 
 extern "C" {
     ENGINE_API void scene_init();

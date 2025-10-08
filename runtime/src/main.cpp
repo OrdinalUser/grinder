@@ -29,16 +29,16 @@ int main() {
     // int value = *paddr;
 
     // throw std::exception("Exception message", 42);
-    // auto e = ENGINE_EXCEPTION_CODE("Hopefully caught exception", 42);
+    //auto e = ENGINE_EXCEPTION_CODE("Hopefully caught exception", 42);
     // e.log(); // This works?
-    try {
-        throw ENGINE_EXCEPTION_CODE("Hopefully caught exception", 42);
-    }
-    catch (const Engine::Exception& e) {
-        e.log(); // this doesn't log?
-    }
+    //try {
+    //    ENGINE_THROW_CODE("Hopefully caught exception", 42);
+    //}
+    //catch (const Engine::Exception& e) {
+    //    e.log(); // this doesn't log?
+    //}
 
-    throw ENGINE_EXCEPTION_CODE("Uncaught exception", 42);
+    // ENGINE_THROW_CODE("Uncaught exception", 42);
 
     // ==== Initialize Window
     if (!glfwInit()) {
@@ -85,7 +85,7 @@ int main() {
     if (!data) Engine::Log::error("Failed to load image");
 
     // ==== Load scene
-    HMODULE scene = LoadLibraryA("C:\\Users\\Skyte\\Desktop\\grinder\\build\\apps\\demo\\Debug\\scene_demod.dll");
+    HMODULE scene = LoadLibraryA("./scene_demod.dll");
     if (!scene) {
         Engine::Log::error("Failed to load scene DLL.\n");
         return 1;
@@ -104,6 +104,7 @@ int main() {
     // ==== Run scene and orchestrate input
     init();
     for (int i = 0; i < 300; ++i) {
+        getchar();
         update(0.016f);
         render();
     }

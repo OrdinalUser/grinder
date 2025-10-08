@@ -27,10 +27,10 @@ namespace Engine {
 
             // We give backward-cpp the full context AND a starting address (Rip).
             // This is much more robust and is similar to what the signal handler does.
-            stack_trace_.load_from(reinterpret_cast<void*>(context.Rip), 8, &context);
+            stack_trace_.load_from(reinterpret_cast<void*>(context.Rip), 8 + 1 + skip_frames, &context);
 #else
             // The POSIX/Linux implementation of load_here is generally more reliable.
-            stack_trace_.load_here(8);
+            stack_trace_.load_here(8 + 1 + skip_frames);
 #endif
             // We now need to skip the frames for this constructor and the Exception constructor.
             stack_trace_.skip_n_firsts(skip_frames + 1);
@@ -75,7 +75,7 @@ namespace Engine {
             Engine::Log::error("Engine::Exception: {} ({})", message_, error_code_);
             std::string msg = stack_trace_.to_string();
             if (!msg.empty()) {
-                Engine::Log::error("  Stack trace:\n{}", msg);
+                Engine::Log::error(" --- Stack trace:\n{}", msg);
             }
         }
 

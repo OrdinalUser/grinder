@@ -53,11 +53,10 @@ static LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS* info) {
     std::ostringstream oss;
     printer.print(st, oss);
 
-    spdlog::error("Signal 0x{:X} at address 0x{:X}",
+    Engine::Log::error("Signal 0x{:X} at address 0x{:X}",
         info->ExceptionRecord->ExceptionCode,
         reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress));
-    spdlog::error("Stack trace:\n{}", oss.str());
-    spdlog::shutdown();
+    Engine::Log::error("Stack trace:\n{}", oss.str());
 
     // Let system terminate
     return EXCEPTION_EXECUTE_HANDLER;
@@ -105,8 +104,8 @@ static void posix_signal_handler(int signo, siginfo_t* info, void* _ctx) {
     std::ostringstream oss;
     printer.print(st, oss);
 
-    spdlog::error("Signal {} received", signo);
-    spdlog::error("Stack trace:\n{}", oss.str());
+    Engine::Log::error("Signal {} received", signo);
+    Engine::Log::error("Stack trace:\n{}", oss.str());
     spdlog::shutdown();
 
     // Forward signal
@@ -181,7 +180,7 @@ static void setup_signals() {
 static void setup_exceptions() {
     // Set up terminate handler for uncaught exceptions.
     std::set_terminate([]() {
-        spdlog::critical("Terminate handler called.");
+        Engine::Log::critical("Terminate handler called.");
         std::exception_ptr eptr = std::current_exception();
 
         try {
@@ -189,23 +188,21 @@ static void setup_exceptions() {
                 std::rethrow_exception(eptr);
             }
             else {
-                spdlog::critical("Terminate called without an active exception.");
+                Engine::Log::critical("Terminate called without an active exception.");
             }
         }
         catch (const Engine::Exception& e) {
-            spdlog::critical("Unhandled Engine::Exception caught by terminate handler.");
+            Engine::Log::critical("Unhandled Engine::Exception caught by terminate handler.");
             e.log();
         }
         catch (const std::exception& e) {
-            spdlog::critical("Unhandled std::exception: {}", e.what());
-            spdlog::error("Stack trace:\n{}", capture_current_stacktrace());
+            Engine::Log::critical("Unhandled std::exception: {}", e.what());
+            Engine::Log::error("Stack trace:\n{}", capture_current_stacktrace());
         }
         catch (...) {
-            spdlog::critical("Unhandled unknown exception.");
-            spdlog::error("Stack trace:\n{}", capture_current_stacktrace());
+            Engine::Log::critical("Unhandled unknown exception.");
+            Engine::Log::error("Stack trace:\n{}", capture_current_stacktrace());
         }
-
-        spdlog::shutdown();
         std::abort();
     });
 }
