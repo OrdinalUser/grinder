@@ -14,6 +14,9 @@
 #include <windows.h>
 #endif
 
+#undef min
+#include <backward.hpp>
+
 constexpr int STACK_TRACE_DEPTH = 10;
 
 #ifdef _WIN32
@@ -57,6 +60,11 @@ static LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS* info) {
         info->ExceptionRecord->ExceptionCode,
         reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress));
     Engine::Log::error("Stack trace:\n{}", oss.str());
+    
+    #ifdef _DEBUG
+    Engine::Log::info("Program paused before halt, press [Enter] to exit");
+    (void)getchar();
+    #endif // _DEBUG
 
     // Let system terminate
     return EXCEPTION_EXECUTE_HANDLER;

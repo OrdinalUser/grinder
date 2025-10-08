@@ -1,8 +1,7 @@
 add_library(engine SHARED
-    src/log.cpp
     src/init.cpp
-    # src/window.cpp
-    # src/renderer.cpp
+    src/log.cpp
+    src/exception.cpp
 )
 
 target_include_directories(engine
@@ -25,5 +24,4 @@ target_link_libraries(engine
         backward
 )
 
-# Export definitions for clients (like scenes)
 target_compile_definitions(engine PRIVATE ENGINE_BUILD)

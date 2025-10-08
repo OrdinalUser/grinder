@@ -20,7 +20,6 @@ typedef void (*scene_func_pf)(float);
 int main() {
     // Set the signal handler for segmentation faults
     engine_initialize();
-    Engine::Log::info("Main started");
 
     // volatile int a = 0; // simulated error 1
     // int num = 10 / a;
@@ -52,17 +51,15 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     GLFWwindow* tempWindow = glfwCreateWindow(1, 1, "Hidden", NULL, NULL);
     if (!tempWindow) {
-        Engine::Log::error("Failed to create temporary GLFW window");
         glfwTerminate();
-        return -1;
+        ENGINE_THROW("Failed to create temporary GLFW window");
     }
 
     glfwMakeContextCurrent(tempWindow);
 
     // Load OpenGL functions
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        Engine::Log::error("Failed to initialize GLAD");
-        return -1;
+        ENGINE_THROW("Failed to initialize GLAD");
     }
 
     // Now release the temporary window
@@ -72,9 +69,8 @@ int main() {
     glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
     GLFWwindow* window = glfwCreateWindow(640, 480, "My OpenGL Application", NULL, NULL);
     if (!window) {
-        Engine::Log::error("Failed to create GLFW window");
         glfwTerminate();
-        return -1;
+        ENGINE_THROW("Failed to create GLFW window");
     }
 
     glfwMakeContextCurrent(window);
@@ -85,10 +81,9 @@ int main() {
     if (!data) Engine::Log::error("Failed to load image");
 
     // ==== Load scene
-    HMODULE scene = LoadLibraryA("./scene_demod.dll");
+    HMODULE scene = LoadLibraryA("./scene_devd.dll");
     if (!scene) {
         Engine::Log::error("Failed to load scene DLL.\n");
-        return 1;
     }
 
     auto init = (scene_func)GetProcAddress(scene, "scene_init");
@@ -97,8 +92,7 @@ int main() {
     auto shutdown = (scene_func)GetProcAddress(scene, "scene_shutdown");
 
     if (!init || !update || !render || !shutdown) {
-        Engine::Log::error("Invalid scene API.\n");
-        return 1;
+        ENGINE_THROW("Invalid scene API.\n");
     }
 
     // ==== Run scene and orchestrate input

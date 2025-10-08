@@ -2,6 +2,7 @@
 
 #include <engine/api.hpp>
 #include <spdlog/spdlog.h>
+#include <memory>
 
 namespace Engine::Log {
 	ENGINE_API void setup_logging();
