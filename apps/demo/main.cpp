@@ -2,7 +2,7 @@
 #include <engine/scene_api.hpp>
 
 extern "C" {
-    void scene_init() {
+    void scene_init(scene_data_t scene_data) {
         std::cout << "[demo] scene_init()\n";
     }
     void scene_update(float dt) {

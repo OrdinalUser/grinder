@@ -11,3 +11,9 @@
 Alternatively run `generate.bat` and pray it works
 
 ## Project Structure
+
+## Scene inspirations
+
+- [Motor town: Behind the wheel](https://store.steampowered.com/app/1369670/Motor_Town_Behind_The_Wheel/)
+- [Urbek](https://store.steampowered.com/app/1411740/Urbek_City_Builder/)
+- [Shadows of Doubt](https://store.steampowered.com/app/986130/Shadows_of_Doubt/)

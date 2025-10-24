@@ -1,1 +1,5 @@
+# CMake nonsense
 build/
+
+# Dev - Other
+imgui.ini
