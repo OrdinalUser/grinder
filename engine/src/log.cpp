@@ -259,7 +259,7 @@ namespace Engine::Log {
         g_logger->set_pattern("[%H:%M:%S] [thread %t] %v");
     }
 
-    std::shared_ptr<spdlog::logger>& get() {
+    std::shared_ptr<spdlog::logger>& Get() {
         std::call_once(g_init_flag, setup_sinks);
         return g_logger;
     }

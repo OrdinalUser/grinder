@@ -48,10 +48,10 @@ namespace Engine {
 		std::vector<ILayer*> m_Layers;
 	};
 
-	class GuiLayer : public ILayer {
+	class DebugLayer : public ILayer {
 	public:
-		ENGINE_API GuiLayer();
-		ENGINE_API ~GuiLayer();
+		ENGINE_API DebugLayer();
+		ENGINE_API ~DebugLayer();
 
 		ENGINE_API void OnAttach() override;
 		ENGINE_API void OnDetach() override;

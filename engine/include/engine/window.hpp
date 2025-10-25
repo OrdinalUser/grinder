@@ -12,11 +12,13 @@ namespace Engine {
 		std::string Title;
 		unsigned int Width;
 		unsigned int Height;
+		bool Fullscreen;
 
 		ENGINE_API WindowProps(const std::string& title = "Grinder Engine",
-			unsigned int width = 1600,
-			unsigned int height = 900)
-			: Title(title), Width(width), Height(height) {
+			unsigned int width = 1600, unsigned int height = 900,
+			bool fullscreen = false
+		)
+			: Title(title), Width(width), Height(height), Fullscreen{ fullscreen } {
 		}
 	};
 

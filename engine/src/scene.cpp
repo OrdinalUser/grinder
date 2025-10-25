@@ -1,6 +1,7 @@
 #include <engine/scene.hpp>
 #include <engine/exception.hpp>
 #include <engine/vfs.hpp>
+#include <engine/application.hpp>
 
 namespace Engine {
 
@@ -34,22 +35,22 @@ namespace Engine {
 		m_initialized{ 0 }
 	{
 		// Check scene resources
-		auto& vfs = Engine::VFS::get();
-		std::filesystem::path relative_root = vfs.AbsoluteToRelative(root);
+		auto vfs = Application::Get().GetVFS();
+		std::filesystem::path relative_root = vfs->AbsoluteToRelative(root);
 
 		// Load module
 		LoadModule(module_path);
 
 		// Module load survived, everything checks out
 		m_name = m_path.stem().filename().string();
-		vfs.AddResourcePath(m_name, relative_root.string());
+		vfs->AddResourcePath(m_name, relative_root.string());
 	}
 
 	Scene::~Scene() {
-		UnloadModule();
+		auto vfs = Application::Get().GetVFS();
+		vfs->DeleteResourcePath(m_name);
 
-		auto& vfs = Engine::VFS::get();
-		vfs.DeleteResourcePath(m_name);
+		UnloadModule();
 	}
 
 	void Scene::Init() {

@@ -1,16 +1,18 @@
 add_library(engine SHARED
-    src/init.cpp
-    src/log.cpp
-    src/exception.cpp
-    src/vfs.cpp
-    src/resource.cpp # not implemented yet
-    src/graphics.cpp # hehe
-    src/scene.cpp
-    src/layer_scene.cpp
-    src/layer_gui.cpp
-    src/layer.cpp
-    src/window.cpp
-    src/application.cpp
+    src/init.cpp # contains initialization logic
+    src/log.cpp # spdlog singleton wrapper
+    src/exception.cpp # prettier exception recovery, uses log
+    src/vfs.cpp # mapping for modules and their roots to real fs for asset lookup
+    src/resource.cpp # resource tracking and loading
+    src/renderer.cpp # hehe ^2 ; immediate mode drawing and ecs+scene_graph integration
+    src/ecs.cpp # hehe ^3 ; entities and their data
+    src/scene_graph.cpp # hehe ; scene graph
+    src/scene.cpp # internal - loads scene modules and their callbacks
+    src/layer_scene.cpp # no comment for now, run scene callbacks
+    src/layer_debug.cpp # debug layer, overlays of the system
+    src/layer.cpp # internal - layer stack implementation
+    src/window.cpp # wraps glfw window minimally
+    src/application.cpp # provdides application singleton
     # These are necessary for imgui, we are not graded for these!
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp

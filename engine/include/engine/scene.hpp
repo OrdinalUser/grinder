@@ -1,5 +1,6 @@
 #pragma once
 
+#include <engine/api.hpp>
 #include <engine/scene_api.hpp>
 #include <filesystem>
 #include <string>

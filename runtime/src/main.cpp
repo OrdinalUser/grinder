@@ -4,6 +4,7 @@
 #include <engine/vfs.hpp>
 #include <engine/scene.hpp>
 #include <engine/application.hpp>
+#include <engine/types.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -41,26 +42,29 @@ int main() {
 
     const WindowProps props{
         "Grinder Engine",
-        1600, 900
+        1600, 900, false
     };
 
     // ==== Start loading shit
     // Initialize application
-    Engine::Application app(std::make_unique<Window>(props));;
-    Engine::VFS& vfs = Engine::VFS::get();
-    vfs.AddResourcePath(Engine::VFS::GetCurrentModuleName(), "engine"); // add engine resources
-    
-    #ifdef _DEBUG
-        // Push debug layer as an overlay
-        app.PushLayer( reinterpret_cast<ILayer*>(  new GuiLayer()  ) );
-    #endif
-    // load our scene as a layer
-    app.PushLayer(reinterpret_cast<ILayer*>(new SceneLayer(new Scene(
-        std::filesystem::path("build/bin/Debug/scene_devd.dll"),
-        std::filesystem::path("apps/dev")
-    ))));
+    Ref<VFS> vfs = MakeRef<VFS>();
+    Ref<ResourceSystem> rs = MakeRef<ResourceSystem>();
 
-    app.Run();
+    vfs->AddResourcePath(Engine::VFS::GetCurrentModuleName(), "engine"); // add engine resources
+    {
+        Engine::Application app(std::make_unique<Window>(props), vfs, rs);
+        #ifdef _DEBUG
+            // Push debug layer as an overlay
+            app.PushLayer( reinterpret_cast<ILayer*>(  new DebugLayer()  ) );
+        #endif
+        // load our scene as a layer
+        app.PushLayer(reinterpret_cast<ILayer*>(new SceneLayer(new Scene(
+            std::filesystem::path("build/bin/Debug/scene_devd.dll"),
+            std::filesystem::path("apps/dev")
+        ))));
+
+        app.Run();
+    }
 
     return 0;
 }

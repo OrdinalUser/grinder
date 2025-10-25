@@ -12,14 +12,18 @@
 
 namespace Engine {
     std::filesystem::path VFS::GetResourcePath(const std::string& module_name, const std::string& filepath) {
+        std::filesystem::path path = Resolve(module_name, filepath);
+        if (!std::filesystem::exists(path)) {
+            ENGINE_THROW("Filepath mapping for " + module_name + " leads to non-existant file " + filepath);
+        }
+        return path;
+    }
+
+    std::filesystem::path VFS::Resolve(const std::string& module_name, const std::string& filepath) {
         if (m_module_root.find(module_name) == m_module_root.end()) {
             ENGINE_THROW("Filepath mapping for " + module_name + " doesn't exist " + filepath);
         }
-        std::filesystem::path path = m_root / m_module_root[module_name] / filepath;
-        if (!std::filesystem::exists(path)) {
-            ENGINE_THROW("Filepath mapping for " + module_name + " doesn't exist " + filepath);
-        }
-        return path;
+        return m_root / m_module_root[module_name] / filepath;
     }
 
     std::filesystem::path VFS::GetEngineResourcePath(const std::string& filepath) {
@@ -43,11 +47,6 @@ namespace Engine {
         }
         m_module_root.erase(module_name);
     }
-        
-    VFS& VFS::get() {
-        static VFS instance;
-        return instance;
-    }
 
     VFS::VFS() : m_root{ std::filesystem::current_path() } {}
 
@@ -67,6 +66,8 @@ namespace Engine {
 
         return relative_path;
     }
+
+    std::unordered_map<std::string, std::filesystem::path>& VFS::GetMap() { return m_module_root; }
 
 #ifdef _WIN32
     std::string VFS::GetCurrentModuleName() {

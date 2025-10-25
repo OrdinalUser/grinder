@@ -1,11 +1,13 @@
 #include <engine/exception.hpp>
 #include <engine/log.hpp>
 
-#undef min
 #include <backward.hpp>
 
 #define WIN32_LEAN_AND_MEAN
+#define NOMIMAX
 #include <windows.h>
+#undef min
+#undef max
 
 namespace Engine {
     StackTrace::StackTrace(int skip_frames) {

@@ -13,10 +13,10 @@ typedef void (*scene_render_f)(void);
 typedef void (*scene_shutdown_f)(void);
 
 extern "C" {
-    ENGINE_API void scene_init(scene_data_t scene_data);
-    ENGINE_API void scene_update(float dt);
-    ENGINE_API void scene_render();
-    ENGINE_API void scene_shutdown();
+    SCENE_API void scene_init(scene_data_t scene_data);
+    SCENE_API void scene_update(float deltaTime);
+    SCENE_API void scene_render();
+    SCENE_API void scene_shutdown();
 }
 
 #endif

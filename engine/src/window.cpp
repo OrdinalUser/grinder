@@ -29,6 +29,7 @@ namespace Engine {
 		Log::info("Creating window {} ({}, {})", props.Title, props.Width, props.Height);
 		m_Window = glfwCreateWindow((int)props.Width, (int)props.Height, m_Data.Title.c_str(), nullptr, nullptr);
 		glfwMakeContextCurrent(m_Window);
+		if (props.Fullscreen) glfwSetWindowMonitor(m_Window, glfwGetPrimaryMonitor(), 0, 0, m_Data.Width, m_Data.Height, GLFW_DONT_CARE);
 	}
 
 	void Window::Shutdown() {

@@ -7,7 +7,7 @@
 namespace Engine {
 	static Application* g_Application_Instance = nullptr;
 
-	Application::Application(std::unique_ptr<Window> window) {
+	Application::Application(std::unique_ptr<Window> window, std::shared_ptr<VFS> vfs, std::shared_ptr<ResourceSystem> rs) : m_Vfs{ vfs }, m_Rs{ rs } {
 		g_Application_Instance = this;
 		Log::info("Initializing Grinder Application");
 		
@@ -47,5 +47,13 @@ namespace Engine {
 
 	void Application::PopLayer(ILayer* layer) {
 		m_LayerStack.Pop(layer);
+	}
+
+	std::shared_ptr<VFS> Application::GetVFS() {
+		return m_Vfs;
+	}
+
+	std::shared_ptr<ResourceSystem> Application::GetResourceSystem() {
+		return m_Rs;
 	}
 }
