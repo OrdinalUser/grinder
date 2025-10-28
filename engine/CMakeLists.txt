@@ -21,23 +21,22 @@ add_library(engine SHARED
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+    # These are also necessary
+    libs/glad/src/glad.c
 )
 
 target_include_directories(engine
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        libs/glad/include
 )
-
-# Glad (OpenGL loader)
-add_library(glad STATIC libs/glad/src/glad.c)
-target_include_directories(glad PUBLIC libs/glad/include)
 
 # Add imgui backend headers
 target_include_directories(engine PRIVATE ${imgui_SOURCE_DIR}/backends ${imgui_SOURCE_DIR})
+target_compile_definitions(engine PRIVATE ENGINE_BUILD GLAD_GLAPI_EXPORT GLAD_GLAPI_EXPORT_BUILD)
 
 target_link_libraries(engine
     PUBLIC
-        glad
         glfw
         glm
         spdlog::spdlog
@@ -46,4 +45,3 @@ target_link_libraries(engine
         backward
 )
 
-target_compile_definitions(engine PRIVATE ENGINE_BUILD)

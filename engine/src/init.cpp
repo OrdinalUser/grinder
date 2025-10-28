@@ -4,11 +4,12 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-extern "C" ENGINE_API void engine_destroy() {
+ENGINE_API void engine_destroy() {
     Engine::Log::destroy_logging();
+    glfwTerminate();
 }
 
-extern "C" ENGINE_API void engine_initialize() {
+ENGINE_API void engine_initialize() {
     Engine::Log::setup_logging();
     atexit(engine_destroy);
     

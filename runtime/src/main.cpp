@@ -53,16 +53,19 @@ int main() {
     vfs->AddResourcePath(Engine::VFS::GetCurrentModuleName(), "engine"); // add engine resources
     {
         Engine::Application app(std::make_unique<Window>(props), vfs, rs);
-        #ifdef _DEBUG
-            // Push debug layer as an overlay
-            app.PushLayer( reinterpret_cast<ILayer*>(  new DebugLayer()  ) );
-        #endif
         // load our scene as a layer
-        app.PushLayer(reinterpret_cast<ILayer*>(new SceneLayer(new Scene(
-            std::filesystem::path("build/bin/Debug/scene_devd.dll"),
+        const std::string dllName = _DEBUG ? "scene_devd.dll" : "scene_dev.dll"; // Thanks CMake for marking my lib with 'd'
+        const std::filesystem::path dllPath = std::filesystem::path("build/bin") / (_DEBUG ? "Debug" : "Release") / dllName;
+        app.PushLayer(static_cast<ILayer*>(new SceneLayer(new Scene(
+            dllPath,
             std::filesystem::path("apps/dev")
         ))));
-
+        
+        #ifdef _DEBUG
+            // Push debug layer as an overlay
+            app.PushLayer(static_cast<ILayer*>(new DebugLayer()));
+        #endif
+        
         app.Run();
     }
 

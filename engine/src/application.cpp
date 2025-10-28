@@ -4,6 +4,10 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+static void glfw_resize_callback(GLFWwindow* window, int width, int height) {
+	Engine::Application& app = Engine::Application::Get();
+}
+
 namespace Engine {
 	static Application* g_Application_Instance = nullptr;
 
@@ -12,6 +16,7 @@ namespace Engine {
 		Log::info("Initializing Grinder Application");
 		
 		m_Window = std::move(window);
+		glClearColor(0.1f, 0.1f, 0.1f, 1);
 	}
 
 	void Application::Run() {
@@ -20,15 +25,13 @@ namespace Engine {
 				m_Running = false;
 				
 			// Clear screen
-			glClearColor(0.1f, 0.1f, 0.1f, 1);
 			glClear(GL_COLOR_BUFFER_BIT);
 
 			// Update all layers
 			for (auto* layer : m_LayerStack)
 				layer->OnUpdate(0.016f); // Deltatime placeholder
 
-			// Render all layers in reverse order
-            for (auto it = m_LayerStack.rbegin(); it != m_LayerStack.rend(); ++it) {
+            for (auto it = m_LayerStack.begin(); it != m_LayerStack.end(); ++it) {
                 ILayer* layer = *it;
                layer->OnRender();
             }

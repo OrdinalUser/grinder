@@ -114,6 +114,13 @@ namespace Engine {
         return shader;
     }
 
+    template<>
+    ENGINE_API std::shared_ptr<Model> ResourceLoader<Model>::load(const std::filesystem::path& path) {
+        // TODO
+        return std::make_shared<Model>();
+    }
+
+
     Shader::~Shader() {
         if (program) glDeleteProgram(program);
     }

@@ -98,7 +98,8 @@ namespace Engine {
 
 						if (node_open) {
 							ImGui::Text("Path: %s", resource->getPath().string().c_str());
-							ImGui::Text("Use Count: %ld", resource.use_count());
+							// We technically also "own" the resource in debug gui, but we don't care for that
+							ImGui::Text("Use Count: %ld", resource.use_count() - 1);
 
 							// Type-specific info
 							if (auto img = std::dynamic_pointer_cast<Image>(resource)) {

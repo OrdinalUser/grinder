@@ -37,6 +37,8 @@ namespace Engine {
 
 		ENGINE_API static std::unique_ptr<Window> Create(const WindowProps& props = WindowProps());
 
+		ENGINE_API void Resize(int width, int height);
+
 	private:
 		ENGINE_API void Init(const WindowProps& props);
 		ENGINE_API void Shutdown();

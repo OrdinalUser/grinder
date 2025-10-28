@@ -1,5 +1,7 @@
-# CMake nonsense
+# CMake and VS nonsense
 build/
+*.vs
 
 # Dev - Other
 imgui.ini
+docs/

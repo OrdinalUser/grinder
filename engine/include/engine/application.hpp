@@ -25,7 +25,6 @@ namespace Engine {
 		ENGINE_API std::shared_ptr<VFS> GetVFS();
 
 		ENGINE_API std::shared_ptr<ResourceSystem> GetResourceSystem();
-
 	private:
 		std::unique_ptr<Window> m_Window;
 		LayerStack m_LayerStack;

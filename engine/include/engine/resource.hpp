@@ -61,10 +61,10 @@ namespace Engine {
         static std::shared_ptr<T> load(const std::filesystem::path& path);
     };
 
-    template struct ENGINE_API ResourceLoader<Image>;
-    template struct ENGINE_API ResourceLoader<Texture>;
-    template struct ENGINE_API ResourceLoader<Shader>;
-    template struct ENGINE_API ResourceLoader<Model>;
+    extern template struct ResourceLoader<Image>;
+    extern template struct ResourceLoader<Texture>;
+    extern template struct ResourceLoader<Shader>;
+    extern template struct ResourceLoader<Model>;
 
 	class ResourceSystem {
     public:
