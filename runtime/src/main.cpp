@@ -5,6 +5,7 @@
 #include <engine/scene.hpp>
 #include <engine/application.hpp>
 #include <engine/types.hpp>
+#include <engine/ecs.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -49,13 +50,21 @@ int main() {
     // Initialize application
     Ref<VFS> vfs = MakeRef<VFS>();
     Ref<ResourceSystem> rs = MakeRef<ResourceSystem>();
+    
+    Ref<ECS> ecs = MakeRef<ECS>();
 
     vfs->AddResourcePath(Engine::VFS::GetCurrentModuleName(), "engine"); // add engine resources
     {
-        Engine::Application app(std::make_unique<Window>(props), vfs, rs);
+        Engine::Application app(std::make_unique<Window>(props), vfs, rs, ecs);
         // load our scene as a layer
-        const std::string dllName = _DEBUG ? "scene_devd.dll" : "scene_dev.dll"; // Thanks CMake for marking my lib with 'd'
-        const std::filesystem::path dllPath = std::filesystem::path("build/bin") / (_DEBUG ? "Debug" : "Release") / dllName;
+        #if _DEBUG
+            // Thanks CMake for marking my lib with 'd'
+            const std::string dllName = "scene_devd.dll";
+            const std::filesystem::path dllPath = std::filesystem::path("build/bin") / "Debug" / dllName;
+        #else
+            const std::string dllName = "scene_dev.dll";
+            const std::filesystem::path dllPath = std::filesystem::path("build/bin") / "Release" / dllName;
+        #endif // _DEBUG
         app.PushLayer(static_cast<ILayer*>(new SceneLayer(new Scene(
             dllPath,
             std::filesystem::path("apps/dev")

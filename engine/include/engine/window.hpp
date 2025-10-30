@@ -39,6 +39,8 @@ namespace Engine {
 
 		ENGINE_API void Resize(int width, int height);
 
+		ENGINE_API float GetAspectRatio() const;
+
 	private:
 		ENGINE_API void Init(const WindowProps& props);
 		ENGINE_API void Shutdown();

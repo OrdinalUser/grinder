@@ -301,7 +301,8 @@ namespace Engine {
         ImGui::End();
 	}
 
-	void DebugLayer::OnRender() {
+	void DebugLayer::OnRender(const std::vector<entity_id>& updatedEntities) {
+		(void)updatedEntities;
 		Begin();
 
 		DrawResourceViewer();

@@ -18,7 +18,6 @@ namespace Engine {
 	}
 
 	void Scene::UnloadModule() {
-		if (m_shutdown_f) m_shutdown_f();
 		#ifdef _WIN32
 		FreeLibrary(m_module);
 		#endif
@@ -47,6 +46,7 @@ namespace Engine {
 	}
 
 	Scene::~Scene() {
+		Shutdown();
 		auto vfs = Application::Get().GetVFS();
 		vfs->DeleteResourcePath(m_name);
 
@@ -70,7 +70,7 @@ namespace Engine {
 	}
 
 	void Scene::Shutdown() {
-		m_shutdown_f();
+		 m_shutdown_f();
 	}
 
 	void Scene::Reload() {

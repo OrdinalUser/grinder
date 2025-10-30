@@ -34,6 +34,7 @@ namespace Engine {
 			auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
 			if (self) self->Resize(width, height);
 		});
+		// glfwSwapInterval(0); // unsure how to handle this at this point in time
 	}
 
 	void Window::Shutdown() {
@@ -49,5 +50,9 @@ namespace Engine {
 		m_Data.Width = width;
 		m_Data.Height = height;
 		glViewport(0, 0, width, height);
+	}
+
+	float Window::GetAspectRatio() const {
+		return static_cast<float>(m_Data.Width) / static_cast<float>(m_Data.Height);
 	}
 }

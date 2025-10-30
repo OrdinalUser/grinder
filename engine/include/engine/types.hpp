@@ -5,6 +5,9 @@
 // ...well this aged poorly
 
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <string>
 #include <vector>
@@ -16,6 +19,9 @@
 #include <variant>
 #include <concepts>
 #include <algorithm>
+#include <unordered_set>
+#include <tuple>
+#include <iterator>
 
 namespace Engine {
     namespace Math {
@@ -62,9 +68,15 @@ namespace Engine {
 
     template<typename K, typename V>
     using unordered_map = std::unordered_map<K, V>;
+    
+    template<typename K>
+    using unordered_set = std::unordered_set<K>;
 
     template<typename T, typename Container = std::vector<T>>
     using priority_queue = std::priority_queue<T, Container>;
+
+    template<typename... types>
+    using tuple = std::tuple<types...>;
 
     // --- Smart pointers ---
     template<typename T>
@@ -94,6 +106,9 @@ namespace Engine {
             : r(r), g(g), b(b), a(a) {}
         constexpr Color(u8 r, u8 g, u8 b, u8 a = 255)
             : r{r/255.0f}, g{g/255.0f}, b{b/255.0f}, a{a/255.0f} {}
+        constexpr Color(i32 r, i32 g, i32 b, i32 a = 255)
+            : r{ r / 255.0f }, g{ g / 255.0f }, b{ b / 255.0f }, a{ a / 255.0f } {
+        }
         constexpr glm::vec4 to_vec4() const { return { r, g, b, a }; }
     };
 

@@ -45,8 +45,6 @@ namespace Engine {
 
 } // namespace Engine
 
-// MACROS to make throwing exceptions easier and ensure stack trace is captured.
-// This is the key: Engine::StackTrace() is created AT THE THROW SITE.
 #define ENGINE_EXCEPTION(msg) \
     Engine::Exception((msg), -1)
 

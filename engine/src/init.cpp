@@ -37,6 +37,8 @@ ENGINE_API void engine_initialize() {
         ENGINE_THROW("Failed to initialize GLAD");
     }
 
+    glEnable(GL_DEPTH_TEST);
+
     // Now release the temporary window
     glfwDestroyWindow(tempWindow);
     glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);

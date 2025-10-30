@@ -1,5 +1,6 @@
 #include <engine/layer.hpp>
 #include <engine/scene.hpp>
+#include <engine/ecs.hpp>
 
 namespace Engine {
 	SceneLayer::SceneLayer(Scene* scene) : ILayer{ "Scene" }, m_Scene{ scene } {}
@@ -14,7 +15,8 @@ namespace Engine {
 		m_Scene->Shutdown();
 	}
 
-	void SceneLayer::OnRender() {
+	void SceneLayer::OnRender(const std::vector<entity_id>& updatedEntities) {
+		// Update renderer here, #TODO
 		m_Scene->Render();
 	}
 
