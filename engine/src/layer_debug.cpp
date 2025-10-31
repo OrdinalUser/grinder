@@ -301,14 +301,234 @@ namespace Engine {
         ImGui::End();
 	}
 
-	void DebugLayer::OnRender(const std::vector<entity_id>& updatedEntities) {
+    // Helper to draw a single entity node recursively
+    static void DrawEntityNode(entity_id entity, entity_id& selected_entity) {
+        auto ecs = Application::Get().GetECS();
+
+        if (!ecs->Exists(entity)) return;
+
+        auto& hierarchy = ecs->GetComponent<Component::Hierarchy>(entity);
+
+        // Build node label
+        char label[64];
+        snprintf(label, sizeof(label), "Entity %u", entity);
+
+        // Check if this entity has children
+        bool has_children = (hierarchy.first_child != null);
+
+        // Tree node flags
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+
+        if (!has_children) {
+            flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+        }
+
+        if (selected_entity == entity) {
+            flags |= ImGuiTreeNodeFlags_Selected;
+        }
+
+        // Draw the tree node
+        bool node_open = ImGui::TreeNodeEx((void*)(intptr_t)entity, flags, "%s", label);
+
+        // Handle selection
+        if (ImGui::IsItemClicked()) {
+            selected_entity = entity;
+        }
+
+        // If node is open and has children, recursively draw them
+        if (node_open && has_children) {
+            entity_id child = hierarchy.first_child;
+            while (child != null) {
+                DrawEntityNode(child, selected_entity);
+                child = ecs->GetComponent<Component::Hierarchy>(child).next_sibling;
+            }
+            ImGui::TreePop();
+        }
+    }
+
+    // Helper to draw the inspector panel for selected entity
+    static void DrawInspector(entity_id entity) {
+        if (entity == null) {
+            ImGui::TextDisabled("No entity selected");
+            return;
+        }
+
+        auto ecs = Application::Get().GetECS();
+
+        if (!ecs->Exists(entity)) {
+            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Entity no longer exists!");
+            return;
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+
+        // Entity ID header
+        ImGui::SeparatorText("Entity Info");
+        ImGui::Text("ID: %u", entity);
+
+        // Hierarchy Component
+        if (ecs->HasComponent<Component::Hierarchy>(entity)) {
+            auto& h = ecs->GetComponent<Component::Hierarchy>(entity);
+
+            if (ImGui::CollapsingHeader("Hierarchy", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Indent();
+                ImGui::Text("Depth: %u", h.depth);
+                ImGui::Text("Parent: %s", h.parent == null ? "null" : std::to_string(h.parent).c_str());
+                ImGui::Text("First Child: %s", h.first_child == null ? "null" : std::to_string(h.first_child).c_str());
+                ImGui::Text("Next Sibling: %s", h.next_sibling == null ? "null" : std::to_string(h.next_sibling).c_str());
+                ImGui::Text("Prev Sibling: %s", h.prev_sibling == null ? "null" : std::to_string(h.prev_sibling).c_str());
+                ImGui::Unindent();
+            }
+        }
+
+        // Transform Component
+        if (ecs->HasComponent<Component::Transform>(entity)) {
+            auto tref = ecs->GetTransformRef(entity);
+            const auto& t = tref.GetTransform();
+
+            if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Indent();
+
+                // Position - column layout
+                ImGui::Text("Position:");
+                ImGui::Columns(3, "pos_columns", false);
+                ImGui::Text("X: %.3f", t.position.x);
+                ImGui::NextColumn();
+                ImGui::Text("Y: %.3f", t.position.y);
+                ImGui::NextColumn();
+                ImGui::Text("Z: %.3f", t.position.z);
+                ImGui::Columns(1);
+
+                ImGui::Spacing();
+
+                // Rotation (as quaternion) - column layout
+                ImGui::Text("Rotation (Quaternion):");
+                ImGui::Columns(4, "quat_columns", false);
+                ImGui::Text("X: %.3f", t.rotation.x);
+                ImGui::NextColumn();
+                ImGui::Text("Y: %.3f", t.rotation.y);
+                ImGui::NextColumn();
+                ImGui::Text("Z: %.3f", t.rotation.z);
+                ImGui::NextColumn();
+                ImGui::Text("W: %.3f", t.rotation.w);
+                ImGui::Columns(1);
+
+                // Rotation (as Euler angles) - column layout
+                vec3 euler = tref.GetRotationEuler();
+                ImGui::Text("Rotation (Euler Degrees):");
+                ImGui::Columns(3, "euler_columns", false);
+                ImGui::Text("X: %.2f°", euler.x);
+                ImGui::NextColumn();
+                ImGui::Text("Y: %.2f°", euler.y);
+                ImGui::NextColumn();
+                ImGui::Text("Z: %.2f°", euler.z);
+                ImGui::Columns(1);
+
+                ImGui::Spacing();
+
+                // Scale - column layout
+                ImGui::Text("Scale:");
+                ImGui::Columns(3, "scale_columns", false);
+                ImGui::Text("X: %.3f", t.scale.x);
+                ImGui::NextColumn();
+                ImGui::Text("Y: %.3f", t.scale.y);
+                ImGui::NextColumn();
+                ImGui::Text("Z: %.3f", t.scale.z);
+                ImGui::Columns(1);
+
+                ImGui::Spacing();
+
+                // Model Matrix (collapsed by default)
+                if (ImGui::TreeNode("Model Matrix")) {
+                    for (int row = 0; row < 4; row++) {
+                        ImGui::Text("%.2f  %.2f  %.2f  %.2f",
+                            t.modelMatrix[0][row],
+                            t.modelMatrix[1][row],
+                            t.modelMatrix[2][row],
+                            t.modelMatrix[3][row]);
+                    }
+                    ImGui::TreePop();
+                }
+
+                ImGui::Unindent();
+            }
+        }
+
+        ImGui::PopStyleVar();
+    }
+
+    // Main function to call in your OnRender
+    void DrawHierarchyViewer(const std::vector<entity_id>& updatedEntities) {
+        (void)updatedEntities; // Could use this for caching, but simple approach for now
+
+        static entity_id selected_entity = null;
+        auto ecs = Application::Get().GetECS();
+
+        // Single unified window with split layout
+        if (ImGui::Begin("Scene Hierarchy & Inspector")) {
+
+            // Create two columns: hierarchy tree on left, inspector on right
+            ImGui::Columns(2, "hierarchy_inspector_columns", true);
+
+            // Set initial column width (only on first run)
+            static bool first_time = true;
+            if (first_time) {
+                ImGui::SetColumnWidth(0, 250);
+                first_time = false;
+            }
+
+            // LEFT COLUMN - Hierarchy Tree
+            ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "Scene Graph");
+
+            if (ImGui::Button("Deselect")) {
+                selected_entity = null;
+            }
+
+            ImGui::BeginChild("HierarchyTree", ImVec2(0, 0), true);
+
+            // Find all root entities (parent == null)
+            std::vector<entity_id> roots;
+
+            for (entity_id id = 0; id < 10000; ++id) { // Adjust max as needed
+                if (ecs->Exists(id) && ecs->HasComponent<Component::Hierarchy>(id)) {
+                    auto& h = ecs->GetComponent<Component::Hierarchy>(id);
+                    if (h.parent == null) {
+                        roots.push_back(id);
+                    }
+                }
+            }
+
+            // Draw all root nodes (they will recursively draw their children)
+            if (roots.empty()) {
+                ImGui::TextDisabled("No entities in scene");
+            }
+            else {
+                for (entity_id root : roots) {
+                    DrawEntityNode(root, selected_entity);
+                }
+            }
+
+            ImGui::EndChild();
+
+            // RIGHT COLUMN - Inspector
+            ImGui::NextColumn();
+
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Inspector");
+
+            ImGui::BeginChild("Inspector", ImVec2(0, 0), true);
+            DrawInspector(selected_entity);
+            ImGui::EndChild();
+        }
+        ImGui::End();
+    }
+	
+    void DebugLayer::OnRender(const std::vector<entity_id>& updatedEntities) {
 		(void)updatedEntities;
 		Begin();
 
 		DrawResourceViewer();
 		DrawModuleViewer();
-
-		// ImGui::ShowDemoWindow();
+        DrawHierarchyViewer(updatedEntities);
 
 		End();
 	}

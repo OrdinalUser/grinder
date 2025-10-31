@@ -27,6 +27,7 @@ namespace Engine {
 		// Register default components and systems
 		RegisterComponent<Component::Transform>();
 		RegisterComponent<Component::Hierarchy>();
+		RegisterComponent<Component::Light>();
 		RegisterSystem<TransformSystem>();
 	}
 
@@ -232,6 +233,12 @@ namespace Engine {
 			return false; // If the component type isn't even registered, it can't have one.
 		}
 		return pool->Has(entity);
+	}
+
+	detail::IComponentPool* ECS::GetPoolImpl(std::type_index type) {
+		detail::IComponentPool* pool = m_Impl->GetPool(type);
+		if (!pool) ENGINE_THROW("Component not registered");
+		return pool;
 	}
 
 	// --- System Implementation ---

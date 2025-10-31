@@ -98,9 +98,9 @@ namespace Engine {
         return std::make_shared<T>(std::forward<Args>(args)...);
     }
 
-    // --- Optional color utility placeholder ---
     struct Color {
         f32 r = 1.f, g = 1.f, b = 1.f, a = 1.f;
+        
         constexpr Color() = default;
         constexpr Color(f32 r, f32 g, f32 b, f32 a = 1.f)
             : r(r), g(g), b(b), a(a) {}
@@ -109,7 +109,26 @@ namespace Engine {
         constexpr Color(i32 r, i32 g, i32 b, i32 a = 255)
             : r{ r / 255.0f }, g{ g / 255.0f }, b{ b / 255.0f }, a{ a / 255.0f } {
         }
-        constexpr glm::vec4 to_vec4() const { return { r, g, b, a }; }
+        constexpr glm::vec4 to_vec4() const noexcept { return { r, g, b, a }; }
+
+        constexpr Color(const Color&) = default;
+        constexpr Color(Color&&) noexcept = default;
+        constexpr Color& operator=(const Color&) = default;
+        constexpr Color& operator=(Color&&) noexcept = default;
+
+        constexpr bool operator==(const Color& other) const noexcept {
+            return r == other.r && g == other.g && b == other.b && a == other.a;
+        }
+        constexpr bool operator!=(const Color& other) const noexcept {
+            return !(*this == other);
+        }
+
+        // predefined colors
+        static constexpr Color white() noexcept { return { 1.f, 1.f, 1.f, 1.f }; }
+        static constexpr Color black() noexcept { return { 0.f, 0.f, 0.f, 1.f }; }
+        static constexpr Color red()   noexcept { return { 1.f, 0.f, 0.f, 1.f }; }
+        static constexpr Color green() noexcept { return { 0.f, 1.f, 0.f, 1.f }; }
+        static constexpr Color blue()  noexcept { return { 0.f, 0.f, 1.f, 1.f }; }
     };
 
     template<typename T>

@@ -102,8 +102,14 @@ extern "C" {
                 }
             }
 
+
             entity_id new_entity = ecs->CreateEntity3D(parent_id);
             all_entities.push_back(new_entity);
+            
+            if (i % 100 == 0) {
+                Component::Light l; l.diffuse = Color(255, 255, 0, 255);
+                ecs->AddComponent(new_entity, l);
+            }
 
             // Give it a random position relative to its parent to spread things out
             std::uniform_real_distribution<float> pos_dist(-15.0f, 15.0f);

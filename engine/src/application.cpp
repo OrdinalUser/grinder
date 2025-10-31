@@ -31,29 +31,31 @@ namespace Engine {
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 			// Update all layers
-			// auto start = std::chrono::high_resolution_clock::now();
+			auto start = std::chrono::high_resolution_clock::now();
 			for (auto* layer : m_LayerStack)
 				layer->OnUpdate(deltaTime); // Deltatime placeholder
-			// auto end = std::chrono::high_resolution_clock::now();
-			// Log::info("Update: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+			auto end = std::chrono::high_resolution_clock::now();
+			Log::info("Update: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
 
-			// start = std::chrono::high_resolution_clock::now();
 			// Update simulation
+			start = std::chrono::high_resolution_clock::now();
 			vector<entity_id> updatedEntities = m_Ecs->GetSystem<TransformSystem>()->Update(deltaTime).value_or(std::vector<entity_id>());
 			m_Ecs->GetSystem<TransformSystem>()->PostUpdate();
-			// end = std::chrono::high_resolution_clock::now();
-			// Log::info("Simulation: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+			end = std::chrono::high_resolution_clock::now();
+			Log::info("Simulation: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
 
             for (auto it = m_LayerStack.begin(); it != m_LayerStack.end(); ++it) {
 				ILayer* layer = *it;
 				layer->OnRender(updatedEntities);
             }
 
-			/*for (auto [transform, light] : m_Ecs->View<Component::Transform, Component::Light>()) {
-				Component::Transform t = transform;
-				Component::Light l = light;
-				int a = 2;
-			}*/
+			Component::Light l;
+			start = std::chrono::high_resolution_clock::now();
+			for (auto [entity, transform, light] : m_Ecs->View<Component::Transform, Component::Light>()) {
+				l.diffuse.r = light.diffuse.r;
+			}
+			end = std::chrono::high_resolution_clock::now();
+			Log::info("ECS_iteration: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
 
 			m_Window->OnUpdate();
 		}

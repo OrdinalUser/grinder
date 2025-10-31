@@ -2,10 +2,11 @@
 
 #include <engine/api.hpp>
 #include <engine/types.hpp>
+#include <engine/exception.hpp>
 
 #include <functional>   // For std::function
 #include <typeindex>    // For std::type_index
-#include <cassert>      // For assertions
+#include <limits>
 
 namespace Engine {
 
@@ -29,6 +30,10 @@ namespace Engine {
 			entity_id prev_sibling;
 			u16 depth;
 		};
+
+		struct Light {
+			Color diffuse;
+		};
 	}
 
 	// Forward declarations for types used in the ECS class interface
@@ -36,6 +41,7 @@ namespace Engine {
 	class ISystem;
 	class RefTransform;
 	class TransformSystem;
+	class ECS;
 
 	namespace detail {
 		// Non-templated interface for a component storage pool.
@@ -49,6 +55,9 @@ namespace Engine {
 			virtual void* Get(entity_id entity) = 0;
 			virtual void Remove(entity_id entity) = 0;
 			virtual bool Has(entity_id entity) const = 0;
+			// View stuff
+			virtual size_t Size() const = 0;
+			virtual entity_id DenseToEntity(size_t index) const = 0;
 		};
 
 		// Templated, concrete implementation of component storage using a sparse/dense set.
@@ -57,14 +66,14 @@ namespace Engine {
 		public:
 			// Adds a component for an entity.
 			void Add(entity_id entity, void* pData) override {
-				assert(!Has(entity) && "Entity already has this component.");
+				if (Has(entity)) ENGINE_THROW("Entity already has this component.");
 
 				// Ensure the sparse array is large enough before we write to it.
 				// This is the optimized part. Instead of resizing with a value,
 				// we just default-construct new elements, which is faster for POD types.
 				constexpr int grow_factor = 2;
 				if (entity >= m_Sparse.size()) {
-					m_Sparse.resize((m_Sparse.size() * grow_factor) + 1, null);
+					m_Sparse.resize((entity * grow_factor) + 1, null);
 				}
 
 				// Map the entity to its future location in the dense array.
@@ -78,15 +87,13 @@ namespace Engine {
 
 			// Retrieves a pointer to an entity's component.
 			void* Get(entity_id entity) override {
-				assert(Has(entity) && "Entity does not have this component to get.");
+				if (!Has(entity)) ENGINE_THROW("Entity does not have this component to get.");
 				return &m_Dense[m_Sparse[entity]];
 			}
 
 			// Removes a component from an entity using swap-and-pop.
 			void Remove(entity_id entity) override {
-				assert(Has(entity) && "Entity does not have this component to remove.");
-
-				// --- OPTIMIZED SWAP-AND-POP ---
+				if (!Has(entity)) ENGINE_THROW("Entity does not have this component to remove.");
 
 				const u32 denseIndexOfRemoved = m_Sparse[entity];
 				const u32 denseIndexOfLast = static_cast<u32>(m_Dense.size() - 1);
@@ -131,6 +138,15 @@ namespace Engine {
 				}
 			}
 
+			size_t Size() const override {
+				return m_Dense.size();
+			}
+
+			entity_id DenseToEntity(size_t index) const override {
+				if (index >= m_Dense.size()) ENGINE_THROW("Out of bound external access");
+				return m_DenseToEntity[index];
+			}
+
 		private:
 			// Tightly packed array of component data.
 			std::vector<T> m_Dense;
@@ -140,6 +156,116 @@ namespace Engine {
 			std::vector<u32> m_Sparse;
 		};
 	} // namespace detail
+
+	template<typename... Components>
+	class ViewIterator {
+	public:
+		// STL stuff
+		using value_type = std::tuple<entity_id, Components&...>;
+		using difference_type = std::ptrdiff_t;
+		using pointer = value_type*;
+		using reference = value_type;
+		using iterator_category = std::forward_iterator_tag;
+
+		ViewIterator(ECS* ecs, const detail::IComponentPool* pool, size_t index)
+			: m_Ecs{ ecs }, m_Pool{ pool }, m_Index{ index } {
+			AdvanceToValid();
+		}
+
+		reference operator*() const {
+			entity_id entity = m_Pool->DenseToEntity(m_Index);
+			return value_type(entity, m_Ecs->GetComponent<Components>(entity)...);
+		}
+
+		ViewIterator& operator++() {
+			++m_Index;
+			AdvanceToValid();
+			return *this;
+		}
+
+		ViewIterator operator++(int) {
+			ViewIterator temp = *this;
+			++(*this);
+			return temp;
+		}
+
+		bool operator==(const ViewIterator& other) const {
+			return m_Index == other.m_Index;
+		}
+
+		bool operator!=(const ViewIterator& other) const {
+			return !(*this == other);
+		}
+
+	private:
+		bool HasAllComponents(entity_id entity) const {
+			// Check all types with folded expression
+			return (m_Ecs->template HasComponent<Components>(entity) && ...);
+		}
+
+		void AdvanceToValid() {
+			while (m_Index < m_Pool->Size()) {
+				entity_id entity = m_Pool->DenseToEntity(m_Index);
+				if (HasAllComponents(entity)) break;
+				++m_Index;
+			}
+		}
+
+		ECS* m_Ecs;
+		const detail::IComponentPool* m_Pool;
+		size_t m_Index;
+	};
+
+	template <typename... Components>
+	class View {
+	public:
+		using iterator = ViewIterator<Components...>;
+		View(ECS* ecs) : m_Ecs{ ecs }, m_SmallestPool{ nullptr } {
+			static_assert(sizeof...(Components) > 0, "View must have at least one component type");
+			FindSmallestPool();
+		}
+
+		iterator begin() const {
+			if (!m_SmallestPool) return iterator(m_Ecs, nullptr, 0);
+			return iterator(m_Ecs, m_SmallestPool, 0);
+		}
+
+		iterator end() const {
+			if (!m_SmallestPool) return iterator(m_Ecs, nullptr, 0);
+			return iterator(m_Ecs, m_SmallestPool, m_SmallestPool->Size());
+		}
+
+	private:
+		size_t size_hint() const {
+			return m_SmallestPool ? m_SmallestPool->Size() : 0;
+		}
+
+		bool empty() const {
+			return !m_SmallestPool || (m_SmallestPool->Size() == 0);
+		}
+
+		void FindSmallestPool() {
+			size_t minSize = std::numeric_limits<size_t>::max();
+			detail::IComponentPool* smallestPool = nullptr;
+			((CheckPool<Components>(minSize, smallestPool)), ...);
+			m_SmallestPool = smallestPool;
+		}
+
+		template<typename T>
+		void CheckPool(size_t& minSize, detail::IComponentPool*& smallestPool) {
+			std::type_index type = std::type_index(typeid(T));
+			detail::IComponentPool* pool = m_Ecs->GetPoolImpl(type);
+			size_t poolSize = pool->Size();
+			if (poolSize < minSize) {
+				minSize = poolSize;
+				smallestPool = pool;
+			}
+		}
+
+	private:
+		ECS* m_Ecs;
+		detail::IComponentPool* m_SmallestPool;
+	};
 
 	class ECS {
 	public:
@@ -185,7 +311,7 @@ namespace Engine {
 		T& GetComponent(entity_id entity) {
 			std::type_index type_idx = std::type_index(typeid(T));
 			void* pData = GetComponentImpl(entity, type_idx);
-			assert(pData && "Component not found or entity is invalid.");
+			if (!pData) ENGINE_THROW("Component not found or entity is invalid.");
 			return *static_cast<T*>(pData);
 		}
 
@@ -216,14 +342,28 @@ namespace Engine {
 			return std::static_pointer_cast<T>(GetSystemImpl(type_idx));
 		}
 
+		template<typename T>
+		detail::ComponentPool<T>* GetPool() {
+			std::type_index type_idx = std::type_index(typeid(T));
+			return std::static_pointer_cast<detail::ComponentPool<T>>(GetSystemImpl(type_idx));
+		}
+
+		template<typename... Components>
+		View<Components...> View() {
+			return ::Engine::View<Components...>(this);
+		}
 
 	private:
+		template <typename ... Components>
+		friend class View;
+
 		// Non-templated functions
 		ENGINE_API void RegisterComponentImpl(std::type_index type, std::function<std::unique_ptr<detail::IComponentPool>()> factory);
 		ENGINE_API void AddComponentImpl(entity_id entity, std::type_index type, void* pData);
 		ENGINE_API void* GetComponentImpl(entity_id entity, std::type_index type);
 		ENGINE_API void RemoveComponentImpl(entity_id entity, std::type_index type);
 		ENGINE_API bool HasComponentImpl(entity_id entity, std::type_index type);
+		ENGINE_API detail::IComponentPool* GetPoolImpl(std::type_index type);
 
 		ENGINE_API void RegisterSystemImpl(std::type_index type, std::shared_ptr<ISystem> system);
 		ENGINE_API std::shared_ptr<ISystem> GetSystemImpl(std::type_index type);
