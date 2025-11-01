@@ -17,3 +17,9 @@ Alternatively run `generate.bat` and pray it works
 - [Motor town: Behind the wheel](https://store.steampowered.com/app/1369670/Motor_Town_Behind_The_Wheel/)
 - [Urbek](https://store.steampowered.com/app/1411740/Urbek_City_Builder/)
 - [Shadows of Doubt](https://store.steampowered.com/app/986130/Shadows_of_Doubt/)
+
+## Used assets
+
+- [Red Car](https://poly.pizza/m/dVLJ5CjB0h)
+- [City Tiles 1](https://poly.pizza/bundle/City-Builder-Bits-1wLdnIddSx)
+- [City Tiles 2](https://sketchfab.com/3d-models/low-poly-city-579d7493dbbc4cfa9fd50dde3df229bb)

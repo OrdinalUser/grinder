@@ -311,7 +311,11 @@ namespace Engine {
 
         // Build node label
         char label[64];
-        snprintf(label, sizeof(label), "Entity %u", entity);
+        if (ecs->HasComponent<Component::Name>(entity)) {
+            Component::Name& name = ecs->GetComponent<Component::Name>(entity);
+            snprintf(label, sizeof(label), "%s", name.name.c_str());
+        }
+        else snprintf(label, sizeof(label), "Entity %u", entity);
 
         // Check if this entity has children
         bool has_children = (hierarchy.first_child != null);
@@ -365,6 +369,11 @@ namespace Engine {
         // Entity ID header
         ImGui::SeparatorText("Entity Info");
         ImGui::Text("ID: %u", entity);
+        if (ecs->HasComponent<Component::Name>(entity)) {
+            ImGui::SameLine();
+            auto& nameComp = ecs->GetComponent<Component::Name>(entity);
+            ImGui::Text("Name: %s", nameComp.name.c_str());
+        }
 
         // Hierarchy Component
         if (ecs->HasComponent<Component::Hierarchy>(entity)) {
@@ -450,6 +459,16 @@ namespace Engine {
                     ImGui::TreePop();
                 }
 
+                ImGui::Unindent();
+            }
+        }
+
+        if (ecs->HasComponent<Component::Drawable3D>(entity)) {
+            auto& drawable = ecs->GetComponent<Component::Drawable3D>(entity);
+            if (ImGui::CollapsingHeader("Drawable3D", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Indent();
+                ImGui::Text("Filepath: %s", drawable.model->m_path.string().c_str());
+                ImGui::Text("Collection: %u", drawable.collectionIndex);
                 ImGui::Unindent();
             }
         }

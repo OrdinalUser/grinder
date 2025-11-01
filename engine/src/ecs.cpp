@@ -1,5 +1,6 @@
 #include <engine/ecs.hpp>
 #include <engine/exception.hpp>
+#include <engine/resource.hpp>
 
 namespace Engine {
 	struct ECSImpl {
@@ -28,6 +29,9 @@ namespace Engine {
 		RegisterComponent<Component::Transform>();
 		RegisterComponent<Component::Hierarchy>();
 		RegisterComponent<Component::Light>();
+		RegisterComponent<Component::Drawable3D>();
+		RegisterComponent<Component::Name>();
+		RegisterComponent<Component::Camera>();
 		RegisterSystem<TransformSystem>();
 	}
 
@@ -47,7 +51,7 @@ namespace Engine {
 		return id;
 	}
 
-	entity_id ECS::CreateEntity3D(entity_id parent, Component::Transform transform) {
+	entity_id ECS::CreateEntity3D(entity_id parent, Component::Transform transform, const std::string& name) {
 		// Create a base entity with a unique ID.
 		const entity_id id = CreateEntity();
 
@@ -81,6 +85,12 @@ namespace Engine {
 
 		// Add the fully configured Hierarchy component to the new entity.
 		AddComponent(id, hierarchy);
+
+		// Add a name if provided
+		if (name.size() != 0) {
+			AddComponent(id, Component::Name{ .name = name });
+		}
+
 		return id;
 	}
 
@@ -158,46 +168,53 @@ namespace Engine {
 		GetSystem<TransformSystem>()->Enqueue(entity);
 	}
 
-	void ECS::DestroyEntity(entity_id entity) {
-		// Check if the entity is part of a hierarchy.
+	void ECS::DestroyEntity(entity_id entity, bool recurse) {
+		if (!Exists(entity))
+			return;
+
+		if (recurse && HasComponent<Component::Hierarchy>(entity)) {
+			auto& hierarchy = GetComponent<Component::Hierarchy>(entity);
+			entity_id child = hierarchy.first_child;
+			while (child != null) {
+				entity_id next = GetComponent<Component::Hierarchy>(child).next_sibling;
+				DestroyEntity(child, true); // recurse downwards
+				child = next;
+			}
+		}
+
 		if (HasComponent<Component::Hierarchy>(entity)) {
 			auto& hierarchy_to_destroy = GetComponent<Component::Hierarchy>(entity);
 			const entity_id parent = hierarchy_to_destroy.parent;
 
-			// Collect all children into a temporary list, because reparenting will modify the sibling list we are iterating.
-			std::vector<entity_id> children_to_reparent;
-			entity_id child = hierarchy_to_destroy.first_child;
-			while (child != null) {
-				children_to_reparent.push_back(child);
-				child = GetComponent<Component::Hierarchy>(child).next_sibling;
+			// If not recursive, reparent children upward
+			if (!recurse) {
+				std::vector<entity_id> children_to_reparent;
+				entity_id child = hierarchy_to_destroy.first_child;
+				while (child != null) {
+					children_to_reparent.push_back(child);
+					child = GetComponent<Component::Hierarchy>(child).next_sibling;
+				}
+				for (entity_id child_to_move : children_to_reparent)
+					ReparentEntity(child_to_move, parent);
 			}
 
-			// Reparent all children to their grandparent.
-			for (entity_id child_to_move : children_to_reparent) {
-				ReparentEntity(child_to_move, parent);
-			}
-
-			// Now that its children are safe, detach the entity itself from its parent.
+			// Detach from parent and siblings
 			if (hierarchy_to_destroy.parent != null) {
 				auto& parent_hierarchy = GetComponent<Component::Hierarchy>(hierarchy_to_destroy.parent);
-				if (parent_hierarchy.first_child == entity) {
+				if (parent_hierarchy.first_child == entity)
 					parent_hierarchy.first_child = hierarchy_to_destroy.next_sibling;
-				}
 			}
-			if (hierarchy_to_destroy.prev_sibling != null) {
+			if (hierarchy_to_destroy.prev_sibling != null)
 				GetComponent<Component::Hierarchy>(hierarchy_to_destroy.prev_sibling).next_sibling = hierarchy_to_destroy.next_sibling;
-			}
-			if (hierarchy_to_destroy.next_sibling != null) {
+			if (hierarchy_to_destroy.next_sibling != null)
 				GetComponent<Component::Hierarchy>(hierarchy_to_destroy.next_sibling).prev_sibling = hierarchy_to_destroy.prev_sibling;
-			}
 		}
 
-		// Now, proceed with removing all of its components.
-		for (auto const& [type, pool] : m_Impl->m_ComponentPools) {
+		// Wipe out components
+		for (auto const& [type, pool] : m_Impl->m_ComponentPools)
 			pool->OnEntityDestroyed(entity);
-		}
 
-		// Finally, recycle the entity ID.
+		// Recycle the entity ID
 		m_Impl->m_FreeEntitySet.insert(entity);
 	}
 
@@ -276,6 +293,50 @@ namespace Engine {
 		return entity < m_Impl->m_NextEntityID && !m_Impl->m_FreeEntitySet.contains(entity);
 	}
 
+	entity_id ECS::Instantiate(entity_id parent, Component::Transform rootTransform, std::shared_ptr<Model> model) {
+		if (!model) ENGINE_THROW("Trying to instantiate non-existant model");
+
+		// Keep track of mapping from blueprint node index → actual entity
+		std::vector<entity_id> entityMap(model->blueprint.size(), null);
+		entity_id rootEntity = null;
+
+		// Step 1: create entities for each blueprint node
+		for (size_t i = 0; i < model->blueprint.size(); ++i) {
+			const auto& bp = model->blueprint[i];
+
+			// Combine blueprint transform with the instantiation root if this is the root node
+			Component::Transform worldTransform = bp.transform;
+			if (bp.parent == null) {
+				worldTransform.modelMatrix = rootTransform.modelMatrix * worldTransform.modelMatrix;
+			}
+
+			// Create entity; if node has a parent, use the parent's entity id
+			entity_id parentEntity = (bp.parent != null)
+				? entityMap[bp.parent]
+				: parent;
+
+			entity_id entity = CreateEntity3D(parentEntity, worldTransform);
+			entityMap[i] = entity;
+
+			if (bp.parent == null)
+				rootEntity = entity;
+
+			// Step 2: attach the drawable for this node’s collection
+			if (bp.collectionIndex < model->collections.size()) {
+				auto drawable = Component::Drawable3D{
+					.model = model,
+					.collectionIndex = bp.collectionIndex
+				};
+				AddComponent<Component::Drawable3D>(entity, drawable);
+				AddComponent<Component::Name>(entity, Component::Name{.name = bp.name});
+			}
+
+			// Step 3: schedule transform system update
+			GetSystem<TransformSystem>()->Enqueue(entity);
+		}
+		return rootEntity;
+	}
+
 	RefTransform::~RefTransform() {
 		if (isDirty) system.Enqueue(id);
 	}
@@ -326,6 +387,11 @@ namespace Engine {
 	void RefTransform::SetRotation(vec3 euler) {
 		// Convert degrees to radians and then create the quaternion.
 		data.rotation = glm::quat(glm::radians(euler));
+		isDirty = true;
+	}
+
+	void RefTransform::RotateAround(vec3 axis, float radians) {
+		data.rotation = glm::angleAxis(radians, axis) * data.rotation;
 		isDirty = true;
 	}
 

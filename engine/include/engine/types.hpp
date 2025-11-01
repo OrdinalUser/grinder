@@ -22,6 +22,7 @@
 #include <unordered_set>
 #include <tuple>
 #include <iterator>
+#include <filesystem>
 
 namespace Engine {
     namespace Math {
@@ -61,6 +62,7 @@ namespace Engine {
     using variant = std::variant<Ts...>;
 
     // --- STL containers ---
+    using path = std::filesystem::path;
     using string = std::string;
 
     template<typename T>
@@ -144,5 +146,77 @@ namespace Engine {
     using std::min;
     using std::max;
     using std::clamp;
+
+    // --- Engine-specific types ---
+    using entity_id = u32; // entity id type, please use
+    constexpr entity_id null = 0xFFFFFFFF; // entity_id that represents no entity
+
+    namespace Component {
+        // Default initialized to identity values
+        struct Transform {
+            vec3 position{ 0.0f };
+            quat rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+            vec3 scale{ 1.0f };
+            mat4 modelMatrix{ 1.0f };
+        };
+
+        // No default initialization, please tread carefully
+        struct Hierarchy {
+            entity_id parent;
+            entity_id first_child;
+            entity_id next_sibling;
+            entity_id prev_sibling;
+            u16 depth;
+        };
+
+        struct Light {
+            Color diffuse;
+        };
+
+        struct Name {
+            string name;
+        };
+
+        struct Camera {
+            bool isMain = false;
+            mat4 viewMatrix = mat4(1.0f);
+            mat4 projectionMatrix = mat4(1.0f);
+
+            // Create a perspective camera
+            static Camera Perspective(
+                float fovDegrees = 60.0f,
+                float aspect = 16.0f / 9.0f,
+                float nearPlane = 0.1f,
+                float farPlane = 100.0f,
+                bool main = false
+            ) {
+                Camera cam;
+                cam.isMain = main;
+                cam.projectionMatrix = glm::perspective(glm::radians(fovDegrees), aspect, nearPlane, farPlane);
+                return cam;
+            }
+
+            // Create an orthographic camera
+            static Camera Ortho(
+                float left = -10.0f,
+                float right = 10.0f,
+                float bottom = -10.0f,
+                float top = 10.0f,
+                float nearPlane = 0.1f,
+                float farPlane = 100.0f,
+                bool main = false
+            ) {
+                Camera cam;
+                cam.isMain = main;
+                cam.projectionMatrix = glm::ortho(left, right, bottom, top, nearPlane, farPlane);
+                return cam;
+            }
+
+            // Helper to set view matrix from position and target
+            void LookAt(const vec3& position, const vec3& target = vec3(0, 0, 0), const vec3& up = vec3(0, 1, 0)) {
+                viewMatrix = glm::lookAt(position, target, up);
+            }
+        };
+    }
 
 } // namespace Engine

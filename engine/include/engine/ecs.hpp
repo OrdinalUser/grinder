@@ -10,31 +10,8 @@
 
 namespace Engine {
 
-	using entity_id = u32; // entity id type, please use
-	constexpr entity_id null = 0xFFFFFFFF; // entity_id that represents no entity
-
-	namespace Component {
-		// Default initialized to identity values
-		struct Transform {
-			vec3 position{ 0.0f };
-			quat rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
-			vec3 scale{ 1.0f };
-			mat4 modelMatrix{ 1.0f };
-		};
-
-		// No default initialization, please tread carefully
-		struct Hierarchy {
-			entity_id parent;
-			entity_id first_child;
-			entity_id next_sibling;
-			entity_id prev_sibling;
-			u16 depth;
-		};
-
-		struct Light {
-			Color diffuse;
-		};
-	}
+	// Forward decl of external stuff
+	struct Model; // 3D model
 
 	// Forward declarations for types used in the ECS class interface
 	struct ECSImpl;
@@ -278,14 +255,16 @@ namespace Engine {
 
 		// Entity management
 		ENGINE_API entity_id CreateEntity();
-		ENGINE_API entity_id CreateEntity3D(entity_id parent = null, Component::Transform transform = Component::Transform());
-		ENGINE_API void DestroyEntity(entity_id entity);
+		ENGINE_API entity_id CreateEntity3D(entity_id parent = null, Component::Transform transform = Component::Transform(), const std::string& name = "");
+		ENGINE_API entity_id Instantiate(entity_id parent, Component::Transform rootTransform, std::shared_ptr<Model> model);
+		ENGINE_API void DestroyEntity(entity_id entity, bool recurse = false);
 
 		// Special functions
 		ENGINE_API RefTransform GetTransformRef(entity_id entity);
 		ENGINE_API const unordered_set<entity_id>& GetDeletedEntities() const;
 		ENGINE_API void ReparentEntity(entity_id entity, entity_id new_parent);
 		ENGINE_API bool Exists(entity_id entity) const;
+		
 
 		// Component management
 		template<typename T>
@@ -371,6 +350,52 @@ namespace Engine {
 		std::unique_ptr<ECSImpl> m_Impl;
 	};
 
+	// Iterates over all children
+	class SiblingIterator {
+	public:
+		using value_type = entity_id;
+		using difference_type = std::ptrdiff_t;
+		using pointer = const value_type*;
+		using reference = value_type;
+		using iterator_category = std::forward_iterator_tag;
+
+		SiblingIterator(ECS* ecs, entity_id current)
+			: m_Ecs{ ecs }, m_Current{ current } {}
+
+		reference operator*() const { return m_Current; }
+
+		SiblingIterator& operator++() {
+			Component::Hierarchy& h = m_Ecs->GetComponent<Component::Hierarchy>(m_Current);
+			m_Current = h.next_sibling;
+			return *this;
+		}
+
+		bool operator==(const SiblingIterator& other) const { return m_Current == other.m_Current; }
+		bool operator!=(const SiblingIterator& other) const { return !(*this == other); }
+
+	private:
+		ECS* m_Ecs;
+		entity_id m_Current;
+	};
+
+	class ChildrenRange {
+	public:
+		ChildrenRange(ECS* ecs, entity_id parent)
+			: m_Ecs{ ecs }, m_Parent{ parent } {
+		}
+
+		auto begin() const {
+			auto& h = m_Ecs->GetComponent<Component::Hierarchy>(m_Parent);
+			return SiblingIterator{ m_Ecs, h.first_child };
+		}
+
+		auto end() const { return SiblingIterator{ m_Ecs, null }; }
+
+	private:
+		ECS* m_Ecs;
+		entity_id m_Parent;
+	};
+
 	// Generic ECS system interface
 	class ISystem {
 	public:
@@ -412,6 +437,8 @@ namespace Engine {
 		ENGINE_API vec3 GetRotationEuler() const;
 		ENGINE_API void SetRotation(vec3 euler);
 		ENGINE_API void SetRotation(quat rotation);
+
+		ENGINE_API void RotateAround(vec3 axis, float radians);
 
 		ENGINE_API vec3 GetScale() const;
 		ENGINE_API void SetScale(vec3 scale);

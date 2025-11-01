@@ -19,6 +19,7 @@ namespace Engine {
 		
 		m_Window = std::move(window);
 		glClearColor(0.1f, 0.1f, 0.1f, 1);
+		glEnable(GL_DEPTH_TEST);
 	}
 
 	void Application::Run() {
@@ -44,18 +45,13 @@ namespace Engine {
 			end = std::chrono::high_resolution_clock::now();
 			Log::info("Simulation: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
 
+			start = std::chrono::high_resolution_clock::now();
             for (auto it = m_LayerStack.begin(); it != m_LayerStack.end(); ++it) {
 				ILayer* layer = *it;
 				layer->OnRender(updatedEntities);
             }
-
-			Component::Light l;
-			start = std::chrono::high_resolution_clock::now();
-			for (auto [entity, transform, light] : m_Ecs->View<Component::Transform, Component::Light>()) {
-				l.diffuse.r = light.diffuse.r;
-			}
 			end = std::chrono::high_resolution_clock::now();
-			Log::info("ECS_iteration: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+			Log::info("Render: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
 
 			m_Window->OnUpdate();
 		}

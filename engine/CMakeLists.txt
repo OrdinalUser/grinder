@@ -4,9 +4,8 @@ add_library(engine SHARED
     src/exception.cpp # prettier exception recovery, uses log
     src/vfs.cpp # mapping for modules and their roots to real fs for asset lookup
     src/resource.cpp # resource tracking and loading
-    src/renderer.cpp # hehe ^2 ; immediate mode drawing and ecs+scene_graph integration
-    src/ecs.cpp # hehe ^3 ; entities and their data
-    src/scene_graph.cpp # hehe ; scene graph
+    src/renderer.cpp # hehe ^2 ; immediate mode drawing and ecs+scene_graph integration #todo
+    src/ecs.cpp # the data layer of the entire system
     src/scene.cpp # internal - loads scene modules and their callbacks
     src/layer_scene.cpp # no comment for now, run scene callbacks
     src/layer_debug.cpp # debug layer, overlays of the system
@@ -28,6 +27,7 @@ add_library(engine SHARED
 target_include_directories(engine
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${stb_SOURCE_DIR}
         libs/glad/include
 )
 
@@ -44,4 +44,3 @@ target_link_libraries(engine
         opengl32
         backward
 )
-

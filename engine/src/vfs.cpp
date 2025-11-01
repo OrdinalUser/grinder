@@ -27,7 +27,7 @@ namespace Engine {
     }
 
     std::filesystem::path VFS::GetEngineResourcePath(const std::string& filepath) {
-       return GetResourcePath(GetCurrentModuleName(), filepath);
+       return Resolve(GetCurrentModuleName(), filepath);
     }
 
     void VFS::AddResourcePath(const std::string& module_name, const std::string& filepath) {

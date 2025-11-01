@@ -7,9 +7,6 @@
 #include <engine/types.hpp>
 #include <engine/ecs.hpp>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
-
 static void walk_cwd_to_project_root() {
     const std::string root_name = "grinder";
     std::filesystem::path cwd = std::filesystem::current_path();
@@ -28,33 +25,21 @@ int main() {
     // Run engine initializations
     engine_initialize();
 
-    // ==== Log test
-    int w, h, channels;
-    unsigned char* data = stbi_load("texture.png", &w, &h, &channels, 4);
-    if (!data) Engine::Log::error("Failed to load image");
-
-    // ==== Exception log test
-    try {
-        ENGINE_THROW("Exception throw test");
-    }
-    catch (Engine::Exception& e) {
-        e.log();
-    }
-
+    // Window properties
     const WindowProps props{
         "Grinder Engine",
         1600, 900, false
     };
 
     // ==== Start loading shit
-    // Initialize application
+    // Initialize subsystems
     Ref<VFS> vfs = MakeRef<VFS>();
-    Ref<ResourceSystem> rs = MakeRef<ResourceSystem>();
-    
     Ref<ECS> ecs = MakeRef<ECS>();
+    Ref<ResourceSystem> rs = MakeRef<ResourceSystem>();
 
     vfs->AddResourcePath(Engine::VFS::GetCurrentModuleName(), "engine"); // add engine resources
     {
+        // Create our application
         Engine::Application app(std::make_unique<Window>(props), vfs, rs, ecs);
         // load our scene as a layer
         #if _DEBUG
