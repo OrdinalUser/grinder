@@ -20,25 +20,11 @@
 namespace Engine {
     namespace DefaultAssets {
         ENGINE_API std::shared_ptr<Texture> GetDefaultColorTexture() {
-            static std::shared_ptr<Texture> white;
-            if (!white) {
-                auto vfs = Application::Get().GetVFS();
-                auto rs = Application::Get().GetResourceSystem();
-                std::shared_ptr<Image> img = rs->load<Image>(vfs->GetEngineResourcePath("assets/textures/white1x1.png"));
-                white = std::make_shared<Texture>(*img);
-            }
-            return white;
+            return Application::Get().GetResourceSystem()->load<Texture>(Application::Get().GetVFS()->GetEngineResourcePath("assets/textures/white1x1.png"));
         }
 
         ENGINE_API std::shared_ptr<Texture> GetDefaultNormalTexture() {
-            static std::shared_ptr<Texture> flatNormal;
-            if (!flatNormal) {
-                auto vfs = Application::Get().GetVFS();
-                auto rs = Application::Get().GetResourceSystem();
-                std::shared_ptr<Image> img = rs->load<Image>(vfs->GetEngineResourcePath("assets/textures/normal1x1.png"));
-                flatNormal = std::make_shared<Texture>(*img);
-            }
-            return flatNormal;
+            return Application::Get().GetResourceSystem()->load<Texture>(Application::Get().GetVFS()->GetEngineResourcePath("assets/textures/normal1x1.png"));
         }
     };
 
@@ -84,6 +70,7 @@ namespace Engine {
     Texture::Texture(const Image& img) {
         width = img.width;
         height = img.height;
+        m_path = img.m_path;
 
         glGenTextures(1, &id);
         glBindTexture(GL_TEXTURE_2D, id);
@@ -155,6 +142,42 @@ namespace Engine {
         glDeleteShader(fragment);
         
         return shader;
+    }
+
+    template<>
+    ENGINE_API std::shared_ptr<Texture> ResourceLoader<Texture>::load(const std::filesystem::path& path) {
+        auto tex = std::make_shared<Texture>();
+
+        // Load image data
+        int channels;
+        unsigned char* data = stbi_load(
+            path.string().c_str(),
+            &tex->width, &tex->height, &channels, 0
+        );
+        if (!data) return nullptr;
+
+        // Create OpenGL texture and upload image
+        glGenTextures(1, &tex->id);
+        glBindTexture(GL_TEXTURE_2D, tex->id);
+
+        GLenum format = (channels == 4) ? GL_RGBA : GL_RGB;
+        glTexImage2D(
+            GL_TEXTURE_2D, 0, format, tex->width, tex->height,
+            0, format, GL_UNSIGNED_BYTE, data
+        );
+
+        // Texture params
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        
+        // Cleanup
+        stbi_image_free(data);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        return tex;
     }
 
     static Component::Transform ConvertToTransform(const aiMatrix4x4& m)
@@ -425,9 +448,10 @@ namespace Engine {
     }
 
     void Shader::SetUniform(const std::string& name, const Texture& tex, TextureSlot slot) {
-        glActiveTexture((u32)slot);               // e.g. GL_TEXTURE0 + slot
+        GLenum texSlot = GL_TEXTURE0 + static_cast<GLenum>(slot);
+        glActiveTexture(texSlot);
         glBindTexture(GL_TEXTURE_2D, tex.id);
-        glUniform1i(GetUniformLoc(name), (u32)slot - GL_TEXTURE0);
+        glUniform1i(GetUniformLoc(name), static_cast<GLint>(slot));
     }
 
     void Shader::SetUniform(Material& m) {

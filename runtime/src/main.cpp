@@ -32,35 +32,41 @@ int main() {
     };
 
     // ==== Start loading shit
-    // Initialize subsystems
-    Ref<VFS> vfs = MakeRef<VFS>();
-    Ref<ECS> ecs = MakeRef<ECS>();
-    Ref<ResourceSystem> rs = MakeRef<ResourceSystem>();
-
-    vfs->AddResourcePath(Engine::VFS::GetCurrentModuleName(), "engine"); // add engine resources
+    // Initialize subsystems, enforce ordering using scopes
+    Ref<Window> window = MakeRef<Window>(props); // window must get destroyed last as it holds the active gl context
     {
-        // Create our application
-        Engine::Application app(std::make_unique<Window>(props), vfs, rs, ecs);
-        // load our scene as a layer
-        #if _DEBUG
+        // Asset subsystems and data depend on gl context
+        Ref<VFS> vfs = MakeRef<VFS>();
+        vfs->AddResourcePath(Engine::VFS::GetCurrentModuleName(), "engine"); // add engine resources
+        Ref<ECS> ecs = MakeRef<ECS>();
+        Ref<ResourceSystem> rs = MakeRef<ResourceSystem>();
+        {
+            // Application depends on its subsystems
+
+            // Create our application
+            Engine::Application app(window, vfs, rs, ecs);
+            
+            // load our scene as a layer
+            #if _DEBUG
             // Thanks CMake for marking my lib with 'd'
             const std::string dllName = "scene_devd.dll";
             const std::filesystem::path dllPath = std::filesystem::path("build/bin") / "Debug" / dllName;
-        #else
+            #else
             const std::string dllName = "scene_dev.dll";
             const std::filesystem::path dllPath = std::filesystem::path("build/bin") / "Release" / dllName;
-        #endif // _DEBUG
-        app.PushLayer(static_cast<ILayer*>(new SceneLayer(new Scene(
-            dllPath,
-            std::filesystem::path("apps/dev")
-        ))));
-        
-        #ifdef _DEBUG
+            #endif // _DEBUG
+            app.PushLayer(static_cast<ILayer*>(new SceneLayer(new Scene(
+                dllPath,
+                std::filesystem::path("apps/dev")
+            ))));
+            
+            #ifdef _DEBUG
             // Push debug layer as an overlay
             app.PushLayer(static_cast<ILayer*>(new DebugLayer()));
-        #endif
-        
-        app.Run();
+            #endif
+            
+            app.Run();
+        }
     }
 
     return 0;

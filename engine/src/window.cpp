@@ -6,10 +6,6 @@
 #include <GLFW/glfw3.h>
 
 namespace Engine {
-	std::unique_ptr<Window> Window::Create(const WindowProps& props) {
-		return std::make_unique<Window>(props);
-	}
-
 	Window::Window(const WindowProps& props) {
 		Init(props);
 	}
@@ -24,8 +20,30 @@ namespace Engine {
 		m_Data.Height = props.Height;
 
 		Log::info("Creating window {} ({}, {})", props.Title, props.Width, props.Height);
+		
+		// Create the window
+		glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+		glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
 		m_Window = glfwCreateWindow((int)props.Width, (int)props.Height, m_Data.Title.c_str(), nullptr, nullptr);
 		glfwMakeContextCurrent(m_Window);
+		
+		// Load OpenGL functions, once
+		static bool glad_loaded = false;
+		if (!glad_loaded) {
+			if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+				ENGINE_THROW("Failed to initialize GLAD");
+			}
+			glad_loaded = true;
+			Log::info("OpenGL information:");
+			Log::info("- version: {}", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+			Log::info("- renderer: {}", reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
+			Log::info("- vendor: {}", reinterpret_cast<const char*>(glGetString(GL_VENDOR)));
+			Log::info("- glsl version: {}",reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION)));
+		}
+		
 		if (props.Fullscreen) glfwSetWindowMonitor(m_Window, glfwGetPrimaryMonitor(), 0, 0, m_Data.Width, m_Data.Height, GLFW_DONT_CARE);
 		
 		// Store 'this' pointer for callback retrieval

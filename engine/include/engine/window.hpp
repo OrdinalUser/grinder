@@ -35,8 +35,6 @@ namespace Engine {
 		// This is the key function for ImGui and other libraries
 		ENGINE_API GLFWwindow* GetNativeWindow() const { return m_Window; }
 
-		ENGINE_API static std::unique_ptr<Window> Create(const WindowProps& props = WindowProps());
-
 		ENGINE_API void Resize(int width, int height);
 
 		ENGINE_API float GetAspectRatio() const;

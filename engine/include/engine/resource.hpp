@@ -46,7 +46,7 @@ namespace Engine {
         ENGINE_API ~Image();
     };
 
-    struct Texture {
+    struct Texture : IResource {
         u32 id = 0;
         int width = 0, height = 0;
 
@@ -141,6 +141,7 @@ namespace Engine {
     };
 
     extern template struct ResourceLoader<Image>;
+    extern template struct ResourceLoader<Texture>;
     extern template struct ResourceLoader<Shader>;
     extern template struct ResourceLoader<Model>;
 

@@ -151,7 +151,7 @@ namespace Engine {
 
 		reference operator*() const {
 			entity_id entity = m_Pool->DenseToEntity(m_Index);
-			return value_type(entity, m_Ecs->GetComponent<Components>(entity)...);
+			return reference(entity, m_Ecs->template GetComponent<Components>(entity)...);
 		}
 
 		ViewIterator& operator++() {

@@ -13,16 +13,17 @@ static void glfw_resize_callback(GLFWwindow* window, int width, int height) {
 namespace Engine {
 	static Application* g_Application_Instance = nullptr;
 
-	Application::Application(std::shared_ptr<Window> window, std::shared_ptr<VFS> vfs, std::shared_ptr<ResourceSystem> rs, std::shared_ptr<ECS> ecs) : m_Vfs{ vfs }, m_Rs{ rs }, m_Ecs{ ecs } {
+	Application::Application(std::shared_ptr<Window> window, std::shared_ptr<VFS> vfs, std::shared_ptr<ResourceSystem> rs, std::shared_ptr<ECS> ecs)
+		: m_Vfs{ vfs }, m_Rs{ rs }, m_Ecs{ ecs }, m_Window{ window } {
 		g_Application_Instance = this;
 		Log::info("Initializing Grinder Application");
-		
-		m_Window = std::move(window);
-		glClearColor(0.1f, 0.1f, 0.1f, 1);
-		glEnable(GL_DEPTH_TEST);
 	}
 
 	void Application::Run() {
+		// Default GL state variables
+		glClearColor(0.1f, 0.1f, 0.1f, 1);
+		glEnable(GL_DEPTH_TEST);
+
 		constexpr float deltaTime = 0.016f;
 		while (m_Running) {
 			if (glfwWindowShouldClose(m_Window->GetNativeWindow()))

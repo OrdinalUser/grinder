@@ -62,6 +62,7 @@ namespace Engine {
 			}
 		}
 
+		auto vendor = glGetString(GL_VENDOR);
 		auto end = std::chrono::high_resolution_clock::now();
 		// Log::info("ECS_iteration: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
 	}
