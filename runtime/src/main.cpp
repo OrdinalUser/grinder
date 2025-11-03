@@ -49,10 +49,10 @@ int main() {
             // load our scene as a layer
             #if _DEBUG
             // Thanks CMake for marking my lib with 'd'
-            const std::string dllName = "scene_devd.dll";
+            const std::string dllName = "scene_demod.dll";
             const std::filesystem::path dllPath = std::filesystem::path("build/bin") / "Debug" / dllName;
             #else
-            const std::string dllName = "scene_dev.dll";
+            const std::string dllName = "scene_demo.dll";
             const std::filesystem::path dllPath = std::filesystem::path("build/bin") / "Release" / dllName;
             #endif // _DEBUG
             app.PushLayer(static_cast<ILayer*>(new SceneLayer(new Scene(
