@@ -1,5 +1,6 @@
 // Car demo
 
+#include <iostream>
 #include <engine/scene_api.hpp>
 #include <engine/exception.hpp>
 #include <engine/log.hpp>
@@ -62,7 +63,6 @@ public:
     // These will hold the data and object buffers
     GLuint vao, vbo, cbo, ibo;
     glm::mat4 modelMatrix{ 1.0f };
-    glm::mat4 viewMatrix{ 1.0f };
 
 public:
     // Public attributes that define position, color ..
@@ -73,8 +73,8 @@ public:
 
 
     // Initialize object data buffers
-    Cube() {
-    };
+    Cube() : shader(nullptr) {
+    }
     // Clean up
     ~Cube() {
         // Delete data from OpenGL
@@ -116,7 +116,7 @@ public:
 
         // Default view and model
         auto mat = glm::mat4(1.0f);
-        shader->SetUniform("ViewMatrix",mat);
+        shader->SetUniform("ViewMatrix", mat);
         shader->SetUniform("ModelMatrix", mat);
     }
 
@@ -132,40 +132,10 @@ public:
 
     }
 
-    void updateViewMatrix(glm::vec3 viewRotation, glm::vec3 targetPosition = glm::vec3(0, 0, 0), float carRotationZ = 0.0f) {
-        float distance = 15.0f;   // distance behind car
-        float height = 8.0f;    // height above car
-
-        // Smooth rotation interpolation
-        static float smoothRotation = carRotationZ;
-        smoothRotation = glm::mix(smoothRotation, carRotationZ, 0.1f);
-
-        // Camera offset in car's local space (behind the car)
-        glm::vec3 localOffset = glm::vec3(
-            sin(smoothRotation) * distance,
-            height,
-            cos(smoothRotation) * distance
-        );
-
-        glm::vec3 cameraPos = targetPosition + localOffset;
-        glm::vec3 up = { 0.0f, 1.0f, 0.0f };
-
-        // Smooth position follow
-        static glm::vec3 smoothCam = cameraPos;
-        smoothCam = glm::mix(smoothCam, cameraPos, 0.1f);
-
-        // Smooth target follow
-        static glm::vec3 smoothTarget = targetPosition;
-        smoothTarget = glm::mix(smoothTarget, targetPosition, 0.1f);
-
-        viewMatrix = glm::lookAt(smoothCam, smoothTarget, up);
-    }
-
-
     // Draw polygons
-
-    void render() {
+    void render(const glm::mat4& viewMatrix ) {
         // Update GPU uniforms
+        shader->Enable();
         shader->SetUniform("ModelMatrix", modelMatrix);
         shader->SetUniform("ViewMatrix", viewMatrix);
         shader->SetUniform("OverallColor", color);
@@ -178,6 +148,9 @@ class City {
 public:
     std::vector<std::unique_ptr<Cube>> objects;
     Ref<Shader> shader = nullptr; 
+    // Optional 3D model buildings (loaded from assets)
+    Ref<Model> bigModel = nullptr;
+    Ref<Model> smallModel = nullptr;
     City() {}
 
     void generate() {
@@ -195,10 +168,10 @@ public:
             {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,4,0,4,31,31,31,32,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,0,0,0,0,0,0,0,0,0,0,0,4,1,1,1,4,0,4,4,1,1,1,4,0,4,4,4,32,32,32,32,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,2,2,2,4,0,4,2,2,2,0,0,4,1,1,1,4,0,4,4,1,1,1,4,0,4,4,4,32,32,32,32,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,0,0,0,2,2,2,0,0,4,1,1,1,4,0,4,4,1,1,1,4,0,4,4,4,4,0,0,7,7,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,4,4,4,4,4,0,4,4,4,4,4,4,0,4,4,4,4,0,0,7,7,0,1,1,1,4,4,4,0,0,4,4,4},
+            {0,2,2,2,0,0,0,2,2,2,0,0,4,1,1,1,4,0,4,4,1,1,1,4,0,4,4,4,4,0,0,0,0,0,4,4,4,4,4,4,0,0,4,4,4},
+            {0,2,2,2,4,0,4,2,2,2,0,0,4,4,4,4,4,0,4,4,4,4,4,4,0,4,4,4,4,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
+            {0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,2,2,2,4,0,4,2,2,2,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,4,4,4,4,4,4,0,0,4,4,4},
             {0,2,2,2,0,0,0,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,2,2,2,4,0,4,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
@@ -224,7 +197,7 @@ public:
             {0,2,2,2,4,0,4,2,2,2,0,0,5,4,5,4,5,4,5,5,4,5,4,5,4,5,5,4,5,4,5,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
+            {0,2,2,2,4,0,4,2,2,2,0,0,1,1,1,4,1,1,1,4,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,2,2,2,0,0,0,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,2,2,2,4,0,4,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,0,0,0,0,0,0,0,0,0,0,0,4,0,4,4,4,0,4,4,0,4,4,4,0,4,4,4,4,0,4,4,0,0,4,4,4,4,4,4,0,0,4,4,4},
@@ -242,7 +215,7 @@ public:
             {0,2,2,2,4,0,4,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,0,0,4,4,4},
             {0,2,2,2,0,0,0,2,2,2,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,2,2,2,4,0,4,2,2,2,0,0,5,4,5,4,5,4,5,5,4,5,4,5,4,5,5,4,5,4,5,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
+            {0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,0,0,4,4,4},
             {0,1,1,1,4,4,2,2,2,4,0,0,1,1,1,0,4,2,2,4,1,1,1,4,0,4,4,2,2,2,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
             {0,1,1,1,4,4,2,2,2,4,0,0,1,1,1,0,4,2,2,4,1,1,1,4,0,4,4,2,2,2,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
@@ -258,14 +231,71 @@ public:
         for (int z = 0; z < rows; z++) {
             for (int x = 0; x < cols; x++) {
                 int tile = cityMap[z][x];
-                auto obj = std::make_unique<Cube>();
-                obj->shader = shader;
-                obj->init();
+
                 // Center the grid around origin (0,0)
                 float worldX = (x - cols / 2.0f) * tileSize;
                 float worldZ = (z - rows / 2.0f) * tileSize;
 
-                if (tile == 1) {
+                // If tile is -1, it's already occupied by a multi-tile building; skip
+                if (tile == -1) continue;
+
+                // If we have 3x3 building models loaded, place them and mark surrounding tiles as occupied (-1)
+                if (tile == 1 && bigModel) {
+                    // Instantiate big building model centered on this tile, occupying 3x3
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), bigModel);
+                    auto ref = ecs->GetTransformRef(e);
+                    ref.SetPosition({ worldX, 0.0f, worldZ });
+                    // Optionally scale the model to roughly cover 3x3 tiles
+                    ref.SetScale({ 3.0f * (tileSize / 2.0f), 3.0f * (tileSize / 2.0f), 3.0f * (tileSize / 2.0f) });
+
+                    // mark neighbors as occupied
+                    for (int dz = -1; dz <= 1; dz++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            int nz = z + dz;
+                            int nx = x + dx;
+                            if (nz >= 0 && nz < rows && nx >= 0 && nx < cols) {
+                                if (!(dz == 0 && dx == 0)) cityMap[nz][nx] = -1;
+                            }
+                        }
+                    }
+                    continue;
+                }
+                else if (tile == 2 && smallModel) {
+                    // Instantiate small building model centered on this tile, occupying 3x3
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), smallModel);
+                    auto ref = ecs->GetTransformRef(e);
+                    ref.SetPosition({ worldX, 0.0f, worldZ });
+                    ref.SetScale({ 2.0f * (tileSize / 2.0f), 2.0f * (tileSize / 2.0f), 2.0f * (tileSize / 2.0f) });
+
+                    // mark neighbors as occupied
+                    for (int dz = -1; dz <= 1; dz++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            int nz = z + dz;
+                            int nx = x + dx;
+                            if (nz >= 0 && nz < rows && nx >= 0 && nx < cols) {
+                                if (!(dz == 0 && dx == 0)) cityMap[nz][nx] = -1;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                // Fallback: create cube for other tiles
+                auto obj = std::make_unique<Cube>();
+                obj->shader = shader;
+                obj->init();
+                if (tile == 5) {
+                    obj->position = { worldX, 0.1f, worldZ };
+                    obj->scale = { tileSize / 2.0f,  1.0f, tileSize / 2.0f };
+                    obj->color = { 0.8,0.6,0.4 };
+                }
+                else if (tile == 31) {
+                    // Gas pump
+                    obj->position = { worldX, 0.75f, worldZ };
+                    obj->scale = { tileSize / 2.0f, 0.75f, tileSize / 2.0f };
+                    obj->color = { 1.0f, 0.8f, 0.0f };
+                }
+                else if (tile == 1) {
                     // Big Building
                     obj->position = { worldX, 5.0f, worldZ };  // y = half height to sit on ground
                     obj->scale = { tileSize / 2.0f, 5.0f, tileSize / 2.0f };
@@ -277,17 +307,6 @@ public:
                     obj->scale = { tileSize / 2.0f, 2.0f, tileSize / 2.0f };
                     obj->color = { 0.1,0.3,0.9 };//{colorDist(gen), colorDist(gen) * 0.8f, colorDist(gen) * 0.9f};
                 }
-                else if (tile == 5) {
-                    obj->position = { worldX, 0.1f, worldZ };
-                    obj->scale = { tileSize / 2.0f,  1.0f, tileSize / 2.0f };
-                    obj->color = { 0.8,0.6,0.4 };
-                }
-                else if (tile == 31) {
-                    // Gas pump
-                    obj->position = { worldX, 0.75f, worldZ };  // y = half height
-                    obj->scale = { tileSize / 2.0f, 0.75f, tileSize / 2.0f };
-                    obj->color = { 1.0f, 0.8f, 0.0f };
-                }
                 else if (tile == 32) {
                     auto obj2 = std::make_unique<Cube>();
                     obj2->shader = shader;
@@ -295,7 +314,7 @@ public:
                     obj->position = { worldX, 1.5f, worldZ };
                     obj->scale = { tileSize / 2.0f, 0.05f, tileSize / 2.0f };
                     obj->color = { 1.0f, 0.8f, 0.0f };
-                    obj2->position = { worldX, 0.01f, worldZ };  // at ground level
+                    obj2->position = { worldX, 0.01f, worldZ };
                     obj2->scale = { tileSize / 2.0f, 0.01f, tileSize / 2.0f };
                     obj2->color = { 0.3f, 0.3f, 0.3f };
                     obj2->updateModelMatrix();
@@ -303,60 +322,61 @@ public:
                 }
                 else if (tile == 4) {
                     // Grass
-                    obj->position = { worldX, 0.025f, worldZ };  // slightly above ground
+                    obj->position = { worldX, 0.025f, worldZ };
                     obj->scale = { tileSize / 2.0f, 0.025f, tileSize / 2.0f };
                     obj->color = { 0.0f, 0.8f, 0.0f };
                 }
                 else if (tile == 0) {
                     // Road
-                    obj->position = { worldX, 0.01f, worldZ };  // at ground level
+                    obj->position = { worldX, 0.01f, worldZ };
                     obj->scale = { tileSize / 2.0f, 0.01f, tileSize / 2.0f };
                     obj->color = { 0.3f, 0.3f, 0.3f };
-
                 }
                 else if (tile == 7) {
-                    obj->position = { worldX, 0.01f, worldZ };  // at ground level
+                    obj->position = { worldX, 0.01f, worldZ };
                     obj->scale = { tileSize / 2.0f, 0.01f, tileSize / 2.0f };
                     obj->color = { 0.3f, 0.3f, 0.3f };
-                   // std::cout << worldX << " " << worldZ << " " << std::endl;
-
+                    std::cout << worldX << "|" << worldZ << std::endl;
                 }
                 else continue;
-                
                 
                 obj->updateModelMatrix();
                 objects.push_back(std::move(obj));
                 count++;
             }
         }
-
-       // std::cout << "✅ Simple city generated — no merging, literal tiles.\n" << count << std::endl;
     }
 
-
-
-
-    void updateView(glm::vec3 viewRot, glm::vec3 targetPos, float carRotationZ) {
+    void render(const glm::mat4& viewMatrix) {
         for (auto& o : objects)
-            o->updateViewMatrix(viewRot, targetPos, carRotationZ);
-    }
-
-
-    void render() {
-        for (auto& o : objects)
-            o->render();
+            o->render(viewMatrix);
     }
 };
 
 Ref<Shader> shader = nullptr;
-glm::vec3 viewRotation{ 0, 0, 0 };
-Cube cube;
 City city;
+
+// Smooth camera tracking variables
+static glm::vec3 smoothCamPos = glm::vec3(0, 0, 0);
+static float smoothCarRotation = 0.0f;
+// Car state machine for demo movement
+enum CarState {
+    MOVE_LEFT,
+    FIRST_TURN,
+    MOVING_FORWARD,
+    TURNING,
+    TURNING_RIGHT,
+    STOPPED
+};
+
+static CarState carState = MOVE_LEFT;
+static float carYaw = 0.0f; // radians
+static float carSpeed = 1.0f; // world units per second
+
 extern "C" {
     
     void scene_init(scene_data_t scene_data) {
         // Scene preamble
-        
         Application& app = Application::Get();
         ecs = app.GetECS();
         vfs = app.GetVFS();
@@ -374,45 +394,129 @@ extern "C" {
         // Load and instantiate our 3D model
         Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/red_car.glb"));
         car = ecs->Instantiate(null, Component::Transform(), model);
+        auto carT = ecs->GetTransformRef(car);
+        carT.SetPosition({ 15,1.5,54 });
+        carT.SetRotation(glm::angleAxis(1.5708f,glm::vec3({0,1,0})));
 
-        city.shader = shader;
-        city.generate();
-        //city.position={ 1,0,1 };
-        //city.init();
+
+    // Load building models (if present) and assign to city
+    try{
+    city.bigModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_building.glb"));
+    } catch (...) {
+        city.bigModel = nullptr;
+    }
+    try{
+        
+    
+    city.smallModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/small_house.glb"));
+    } catch (...) {
+        city.smallModel = nullptr;
+    }
+    city.shader = shader;
+    city.generate();
     }
 
     void scene_update(float deltaTime) {
-        // Rotate camera around origin
-        static float angle = 0.0f;
-        constexpr float ROTATION_SPEED = 0.05f;
-        angle += ROTATION_SPEED * deltaTime;
+        // Get car transform
+        auto carTransform = ecs->GetTransformRef(car);
+        glm::vec3 carPos = carTransform.GetPosition();
+        glm::quat carRot = carTransform.GetRotation();
 
-        constexpr float radius = 2.5f;
-        auto trans = ecs->GetTransformRef(camera);
-        float camX = radius * cos(angle);
-        float camZ = radius * sin(angle);
-        trans.SetPosition(vec3(camX, 1.0f, camZ));
-        camComp->LookAt(trans.GetPosition());
+        // Extract car's Y-axis rotation (yaw)
+        glm::vec3 carEuler = glm::eulerAngles(carRot);
+        float carYaw = carEuler.y;
+
+        // Smooth rotation interpolation
+        smoothCarRotation = glm::mix(smoothCarRotation, carYaw, 0.1f);
+
+        // Camera follows behind the car
+        float distance = 15.0f;  // distance behind car
+        float height = 8.0f;     // height above car
+
+        // Calculate camera offset in car's local space
+        glm::vec3 localOffset = glm::vec3(
+            sin(smoothCarRotation) * distance,
+            height,
+            cos(smoothCarRotation) * distance
+        );
+
+        glm::vec3 targetCamPos = carPos + localOffset;
+
+        // Smooth camera position follow
+        smoothCamPos = glm::mix(smoothCamPos, targetCamPos, 0.1f);
+
+        // Update camera entity transform
+        auto cameraTransform = ecs->GetTransformRef(camera);
+        cameraTransform.SetPosition(smoothCamPos);
+
+        // Make camera look at car
+        camComp->LookAt(smoothCamPos, carPos);
 
         // Rotate car wheels
         constexpr float WHEEL_ROTATION_SPEED = 5.0f;
-        auto ecs = Application::Get().GetECS();
-        for (entity_id child : ChildrenRange(ecs.get(), car)) {
-            auto transformRef = ecs->GetTransformRef(child);
-            transformRef.RotateAround({ 0.0f, 1.0f, 0.0f }, glm::radians(WHEEL_ROTATION_SPEED * deltaTime));
+ 
 
+        // Car movement state machine
+        {
+            glm::vec3 pos = carTransform.GetPosition();
+
+            switch (carState) {
+            case MOVE_LEFT:
+                pos.x -= carSpeed * deltaTime;
+
+                if (pos.x < -23.0f) {
+                    pos.x = -23.0f;
+                    carState = FIRST_TURN;
+                }
+                break;
+            case FIRST_TURN:
+                carYaw -= 0.02f;
+                if (carYaw < 0.0f) {
+                    carYaw = 0.0f;
+                    carState = MOVING_FORWARD;
+                }
+                break;
+            case MOVING_FORWARD:
+                pos.z -= carSpeed * deltaTime;
+                carYaw = 0.0f;
+                if (pos.z <= -34.0f) {
+                    carState = TURNING;
+                    pos.z = -34.0f; // Snap to exact position
+                }
+                break;
+            case TURNING:
+                carYaw -= 0.02f;
+                if (carYaw < -1.5708f) {
+                    carState = TURNING_RIGHT;
+                    carYaw = -1.5708f; // -90 degrees
+                }
+                break;
+            case TURNING_RIGHT:
+                pos.x += carSpeed * deltaTime;
+                if (pos.x >= 11.0f) {
+                    carState = STOPPED;
+                    pos.x = 11.0f;
+                }
+                break;
+            case STOPPED:
+                carYaw = -1.5708f;
+                break;
+            }
+
+            carTransform.SetPosition(pos);
+            carTransform.SetRotation(glm::angleAxis(carYaw, glm::vec3(0.0f, 1.0f, 0.0f)));
         }
-        auto ref = ecs->GetTransformRef(car);
-        ref.SetPosition({ 10,0,10 });
-    
+    carTransform.SetScale({ 1.5f, 1.5f, 1.5f });
     }
 
     void scene_render() {
         city.shader->Enable();
-        auto ident = glm::mat4(1.0f);
-        //city.updateModelMatrix();
-        city.updateView(viewRotation, cube.position, cube.rotation.z);
-        city.render();
+        
+        // Get the camera's view matrix from the ECS camera component
+        glm::mat4 viewMatrix = camComp->viewMatrix;
+        
+        // Render city with the camera's view matrix
+        city.render(viewMatrix);
     }
 
     void scene_shutdown() {
