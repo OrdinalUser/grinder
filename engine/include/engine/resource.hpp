@@ -1,8 +1,24 @@
 #pragma once
 #include <engine/api.hpp>
 #include <engine/types.hpp>
+#include <engine/exception.hpp>
 
 namespace Engine {
+    struct BBox {
+        glm::vec3 min;
+        glm::vec3 max;
+
+        glm::vec3 center() const { return (min + max) * 0.5f; }
+        glm::vec3 size() const { return max - min; }
+        glm::vec3 extents() const { return size() * 0.5f; }  // Half-size
+
+        bool contains(const glm::vec3& point) const {
+            return point.x >= min.x && point.x <= max.x &&
+                point.y >= min.y && point.y <= max.y &&
+                point.z >= min.z && point.z <= max.z;
+        }
+    };
+
     struct IResource {
     public:
         ENGINE_API virtual ~IResource() = default;
@@ -23,16 +39,16 @@ namespace Engine {
 
         unsigned int program = 0;
         
-        ENGINE_API u32 GetUniformLoc(const std::string& name);
+        ENGINE_API u32 GetUniformLoc(const std::string& name) const;
 
-        ENGINE_API void SetUniform(const std::string& name, float v);
-        ENGINE_API void SetUniform(const std::string& name, vec2& v);
-        ENGINE_API void SetUniform(const std::string& name, vec3& v);
-        ENGINE_API void SetUniform(const std::string& name, vec4& v);
-        ENGINE_API void SetUniform(const std::string& name, mat4& v);
+        ENGINE_API void SetUniform(const std::string& name, const float v) const;
+        ENGINE_API void SetUniform(const std::string& name, const vec2& v) const;
+        ENGINE_API void SetUniform(const std::string& name, const vec3& v) const;
+        ENGINE_API void SetUniform(const std::string& name, const vec4& v) const;
+        ENGINE_API void SetUniform(const std::string& name, const mat4& v) const;
         
-        ENGINE_API void SetUniform(const std::string& name, const Texture& tex, TextureSlot slot);
-        ENGINE_API void SetUniform(Material& v);
+        ENGINE_API void SetUniform(const std::string& name, const Texture& tex, const TextureSlot slot) const;
+        ENGINE_API void SetUniform(const Material& v) const;
 
         ENGINE_API void Enable() const;
         ENGINE_API ~Shader();
@@ -120,6 +136,7 @@ namespace Engine {
         std::vector<MeshCollection> collections;
 
         std::vector<BlueprintNode> blueprint;
+        BBox bounds;
         
         // We'll have ECS::Instantiate(entity_id parent = null, Component::Transform transform = Component::Transform(), Model& model)
         ENGINE_API ~Model() = default;
@@ -129,44 +146,116 @@ namespace Engine {
         struct Drawable3D {
             std::shared_ptr<Model> model;
             u32 collectionIndex;
-            ENGINE_API const Model::MeshCollection& GetCollection() const {
-                return model->collections[collectionIndex];
-            }
+            ENGINE_API const Model::MeshCollection& GetCollection() const;
         };
     }
 
-    template<typename T>
-    struct ResourceLoader {
-        static std::shared_ptr<T> load(const std::filesystem::path& path);
-    };
+    namespace LoadCfg {
+        enum class ColorFormat {
+            Auto = 0,      // Keep original format
+            Grayscale = 1,
+            GrayscaleAlpha = 2,
+            RGB = 3,
+            RGBA = 4
+        };
 
-    extern template struct ResourceLoader<Image>;
-    extern template struct ResourceLoader<Texture>;
-    extern template struct ResourceLoader<Shader>;
-    extern template struct ResourceLoader<Model>;
+        enum class TextureFilter {
+            Nearest,
+            Linear,
+            NearestMipmapNearest,
+            LinearMipmapNearest,
+            NearestMipmapLinear,
+            LinearMipmapLinear
+        };
+
+        enum class TextureWrap {
+            Repeat,
+            MirroredRepeat,
+            ClampToEdge,
+            ClampToBorder
+        };
+
+        struct Image {
+            ColorFormat format = ColorFormat::RGB;
+            bool flip_vertically = false;
+
+            // Resize options (0 = no resize)
+            int width = 0;
+            int height = 0;
+            bool maintain_aspect = false;  // If one dimension is 0, calculate from aspect ratio
+        };
+
+        // Has to inherit in a stupid way, sorry
+        struct Texture {
+            ColorFormat format = ColorFormat::RGB;
+            bool flip_vertically = false;
+
+            // Resize options (0 = no resize)
+            int width = 0;
+            int height = 0;
+            bool maintain_aspect = false;  // If one dimension is 0, calculate from aspect ratio
+
+            TextureFilter min_filter = TextureFilter::LinearMipmapLinear;
+            TextureFilter mag_filter = TextureFilter::Linear;
+            TextureWrap wrap_s = TextureWrap::Repeat;
+            TextureWrap wrap_t = TextureWrap::Repeat;
+            bool generate_mipmaps = true;
+        };
+
+        struct Model {
+            bool normalize = false; // doesn't work currently
+            bool static_mesh = false;
+            bool flip_uvs = true;
+        };
+
+        struct Shader {
+            bool unused = false;
+        };
+    }
+
+    namespace ResourceLoader {
+        ENGINE_API std::shared_ptr<Image> load(const std::filesystem::path& path, const LoadCfg::Image& cfg = LoadCfg::Image());
+        ENGINE_API std::shared_ptr<Texture> load(const std::filesystem::path& path, const LoadCfg::Texture& cfg = LoadCfg::Texture());
+        ENGINE_API std::shared_ptr<Shader> load(const std::filesystem::path& path, const LoadCfg::Shader& cfg = LoadCfg::Shader());
+        ENGINE_API std::shared_ptr<Model> load(const std::filesystem::path& path, const LoadCfg::Model& cfg = LoadCfg::Model());
+    }
+
+    // Traits to get config type for each resource
+    template<typename T> struct ResourceConfigTraits;
+    template<> struct ResourceConfigTraits<Image> { using ConfigType = LoadCfg::Image; };
+    template<> struct ResourceConfigTraits<Texture> { using ConfigType = LoadCfg::Texture; };
+    template<> struct ResourceConfigTraits<Model> { using ConfigType = LoadCfg::Model; };
+    template<> struct ResourceConfigTraits<Shader> { using ConfigType = LoadCfg::Shader; };
 
 	class ResourceSystem {
     public:
-        // Load a resource (or get cached version)
+        template<typename T, typename Config>
+        std::shared_ptr<T> load(const std::filesystem::path& path, const Config cfg) {
+            return loadImpl<T>(path, cfg);
+        }
+
         template<typename T>
         std::shared_ptr<T> load(const std::filesystem::path& path) {
-            auto key = makeCacheKey<T>(path);
-            
-            // Check cache
-            auto it = m_cache.find(key);
-            if (it != m_cache.end()) {
-                return std::static_pointer_cast<T>(it->second);
-            }
-            
-            // Load new resource using specialized loader
-            auto resource = ResourceLoader<T>::load(path);
-            if (resource) {
-                resource->m_path = path;
-                m_cache[key] = resource;
-            }
-            
-            return resource;
+            using Config = typename ResourceConfigTraits<T>::ConfigType;
+            return load<T, Config>(path, Config{});
         }
+
+        // IDE support, please!
+        /*std::shared_ptr<Image> load(const std::filesystem::path& path, const LoadCfg::Image cfg = {}) {
+            return this->template loadImpl<Image>(path, cfg);
+        }
+
+        std::shared_ptr<Texture> load(const std::filesystem::path& path, const LoadCfg::Texture cfg = {}) {
+            return this->template loadImpl<Texture>(path, cfg);
+        }
+
+        std::shared_ptr<Shader> load(const std::filesystem::path& path, const LoadCfg::Shader cfg = {}) {
+            return this->template loadImpl<Shader>(path, cfg);
+        }
+
+        std::shared_ptr<Model> load(const std::filesystem::path& path, const LoadCfg::Model cfg = {}) {
+            return this->template loadImpl<Model>(path, cfg);
+        }*/
 
         // For resources that don't come from a single file
         template<typename T>
@@ -197,6 +286,25 @@ namespace Engine {
         ENGINE_API std::unordered_map<std::string, std::shared_ptr<IResource>>& get_cache() { return m_cache; }
 
     private:
+        template<typename T, typename Config>
+        std::shared_ptr<T> loadImpl(const std::filesystem::path& path, const Config& cfg) {
+            auto key = makeCacheKey<T>(path);
+
+            if (auto it = m_cache.find(key); it != m_cache.end())
+                return std::static_pointer_cast<T>(it->second);
+
+            auto resource = ResourceLoader::load(path, cfg);
+
+            if (!resource) {
+                ENGINE_THROW("Failed to load resource");
+                return nullptr;
+            }
+
+            resource->m_path = path;
+            m_cache[key] = resource;
+            return resource;
+        }
+
         template<typename T>
         std::string makeCacheKey(const std::filesystem::path& path) {
             return std::string(typeid(T).name()) + "|" + path.string();

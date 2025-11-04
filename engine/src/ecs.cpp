@@ -345,61 +345,6 @@ namespace Engine {
 		return data;
 	}
 
-	vec3 RefTransform::GetPosition() const {
-		return data.position;
-	}
-
-	quat RefTransform::GetRotation() const {
-		return data.rotation;
-	}
-
-	// Helper to convert the internal quaternion to user-friendly Euler angles.
-	vec3 RefTransform::GetRotationEuler() const {
-		// glm::eulerAngles returns radians, so we convert to degrees for easier use.
-		return glm::degrees(glm::eulerAngles(data.rotation));
-	}
-
-	vec3 RefTransform::GetScale() const {
-		return data.scale;
-	}
-
-	RefTransform::RefTransform(ECS& ecs, entity_id entity, Component::Transform& transform, TransformSystem& system)
-		: ecs{ ecs }, id{ entity }, data{ transform }, system{ system }, isDirty{ false } {
-	}
-
-	void RefTransform::SetTransform(Component::Transform& transform) {
-		data = transform;
-		isDirty = true;
-	}
-
-	void RefTransform::SetPosition(vec3 position) {
-		data.position = position;
-		isDirty = true;
-	}
-
-	// Sets the rotation directly using a quaternion.
-	void RefTransform::SetRotation(quat rotation) {
-		data.rotation = rotation;
-		isDirty = true;
-	}
-
-	// Sets the rotation using Euler angles (in degrees).
-	void RefTransform::SetRotation(vec3 euler) {
-		// Convert degrees to radians and then create the quaternion.
-		data.rotation = glm::quat(glm::radians(euler));
-		isDirty = true;
-	}
-
-	void RefTransform::RotateAround(vec3 axis, float radians) {
-		data.rotation = glm::angleAxis(radians, axis) * data.rotation;
-		isDirty = true;
-	}
-
-	void RefTransform::SetScale(vec3 scale) {
-		data.scale = scale;
-		isDirty = true;
-	}
-
 	// --- Systems impl ---
 
 	void TransformSystem::Enqueue(entity_id entity) {
@@ -479,4 +424,109 @@ namespace Engine {
 		}
 		m_Registered.clear();
 	};
+
+	//// TransformRef nonsense
+	vec3 RefTransform::GetPosition() const {
+		return data.position;
+	}
+
+	quat RefTransform::GetRotation() const {
+		return data.rotation;
+	}
+
+	// Helper to convert the internal quaternion to user-friendly Euler angles.
+	vec3 RefTransform::GetRotationEuler() const {
+		// glm::eulerAngles returns radians, so we convert to degrees for easier use.
+		return glm::degrees(glm::eulerAngles(data.rotation));
+	}
+
+	vec3 RefTransform::GetScale() const {
+		return data.scale;
+	}
+
+	RefTransform::RefTransform(ECS& ecs, entity_id entity, Component::Transform& transform, TransformSystem& system)
+		: ecs{ ecs }, id{ entity }, data{ transform }, system{ system }, isDirty{ false } {
+	}
+
+	void RefTransform::SetTransform(Component::Transform& transform) {
+		data = transform;
+		isDirty = true;
+	}
+
+	void RefTransform::SetPosition(vec3 position) {
+		data.position = position;
+		isDirty = true;
+	}
+
+	// Sets the rotation directly using a quaternion.
+	void RefTransform::SetRotation(quat rotation) {
+		data.rotation = rotation;
+		isDirty = true;
+	}
+
+	// Sets the rotation using Euler angles (in degrees).
+	void RefTransform::SetRotation(vec3 euler) {
+		// Convert degrees to radians and then create the quaternion.
+		data.rotation = glm::quat(glm::radians(euler));
+		isDirty = true;
+	}
+
+	void RefTransform::RotateAround(vec3 axis, float radians) {
+		data.rotation = glm::angleAxis(radians, axis) * data.rotation;
+		isDirty = true;
+	}
+
+	void RefTransform::SetScale(vec3 scale) {
+		data.scale = scale;
+		isDirty = true;
+	}
+
+	void RefTransform::Translate(const vec3& delta) {
+		data.position += delta;
+		isDirty = true;
+	}
+
+	void RefTransform::MoveTowards(const vec3& targetPos, float maxDistance) {
+		vec3 direction = targetPos - data.position;
+		float distance = glm::length(direction);
+
+		if (distance <= maxDistance || distance < 0.0001f) {
+			data.position = targetPos;
+		}
+		else {
+			data.position = data.position + (direction / distance) * maxDistance;
+		}
+		isDirty = true;
+	}
+
+	void RefTransform::RotateTowards(const quat& targetRotation, float maxRadians) {
+		const float angle = glm::angle(data.rotation * glm::inverse(targetRotation));
+
+		if (angle <= maxRadians || angle < 0.0001f) {
+			data.rotation = targetRotation;
+		}
+		else {
+			const float t = maxRadians / angle;
+			data.rotation = glm::slerp(data.rotation, targetRotation, t);
+		}
+		isDirty = true;
+	}
+
+	void RefTransform::RotateTowards(const vec3& targetEuler, float maxRadians) {
+		quat targetQuat = quat(targetEuler);
+		RotateTowards(targetQuat, maxRadians);
+	}
+
+	vec3 RefTransform::Forward() const {
+		return data.Forward();
+	}
+
+	vec3 RefTransform::Right() const {
+		return data.Right();
+	}
+
+	vec3 RefTransform::Up() const {
+		return data.Up();
+	}
+
 } // namespace Engine

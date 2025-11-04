@@ -1,5 +1,6 @@
 #include <engine/application.hpp>
 #include <engine/log.hpp>
+#include <engine/perf_profiler.hpp>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -16,7 +17,7 @@ namespace Engine {
 	Application::Application(std::shared_ptr<Window> window, std::shared_ptr<VFS> vfs, std::shared_ptr<ResourceSystem> rs, std::shared_ptr<ECS> ecs)
 		: m_Vfs{ vfs }, m_Rs{ rs }, m_Ecs{ ecs }, m_Window{ window } {
 		g_Application_Instance = this;
-		Log::info("Initializing Grinder Application");
+		Log::trace("Initializing Grinder Application");
 	}
 
 	void Application::Run() {
@@ -24,35 +25,48 @@ namespace Engine {
 		glClearColor(0.1f, 0.1f, 0.1f, 1);
 		glEnable(GL_DEPTH_TEST);
 
-		constexpr float deltaTime = 0.016f;
+		using clock = std::chrono::steady_clock;
+		auto lastTime = clock::now();
+		float accumulator = 0.0f;
+		constexpr float fixedDelta = 1.0f / 60.0f; // 60 Hz fixed update
+		
 		while (m_Running) {
 			if (glfwWindowShouldClose(m_Window->GetNativeWindow()))
 				m_Running = false;
-				
+			
+			// Compute time delta
+			auto now = clock::now();
+			float deltaTime = std::chrono::duration<float>(now - lastTime).count();
+			lastTime = now;
+			accumulator = std::min(accumulator + deltaTime, fixedDelta * 5.0f); // cap to prevent infinite fixed updates
+
 			// Clear screen
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			
+			PERF_BEGIN("Update_Fixed");
+			while (accumulator >= fixedDelta) {
+				for (ILayer* layer : m_LayerStack)
+					layer->OnUpdateFixed(fixedDelta); // your new scene_update_fixed() hook
+				accumulator -= fixedDelta;
+			}
+			PERF_END("Update_Fixed");
 
-			// Update all layers
-			auto start = std::chrono::high_resolution_clock::now();
-			for (auto* layer : m_LayerStack)
-				layer->OnUpdate(deltaTime); // Deltatime placeholder
-			auto end = std::chrono::high_resolution_clock::now();
-			Log::info("Update: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+			PERF_BEGIN("Update");
+			for (ILayer* layer : m_LayerStack)
+				layer->OnUpdate(deltaTime);
+			PERF_END("Update");
 
-			// Update simulation
-			start = std::chrono::high_resolution_clock::now();
+			PERF_BEGIN("Simulation");
 			vector<entity_id> updatedEntities = m_Ecs->GetSystem<TransformSystem>()->Update(deltaTime).value_or(std::vector<entity_id>());
 			m_Ecs->GetSystem<TransformSystem>()->PostUpdate();
-			end = std::chrono::high_resolution_clock::now();
-			Log::info("Simulation: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+			PERF_END("Simulation");
 
-			start = std::chrono::high_resolution_clock::now();
-            for (auto it = m_LayerStack.begin(); it != m_LayerStack.end(); ++it) {
+			PERF_BEGIN("Render");
+			for (auto it = m_LayerStack.begin(); it != m_LayerStack.end(); ++it) {
 				ILayer* layer = *it;
 				layer->OnRender(updatedEntities);
-            }
-			end = std::chrono::high_resolution_clock::now();
-			Log::info("Render: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+			}
+			PERF_END("Render");
 
 			m_Window->OnUpdate();
 		}

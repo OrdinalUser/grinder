@@ -18,9 +18,10 @@ namespace Engine {
 		ENGINE_API ~Scene();
 
 		ENGINE_API void Init();
-		ENGINE_API void Update(float deltaTime);
-		ENGINE_API void Render();
-		ENGINE_API void Shutdown();
+		ENGINE_API void UpdateFixed(float deltaTime) const;
+		ENGINE_API void Update(float deltaTime) const;
+		ENGINE_API void Render() const;
+		ENGINE_API void Shutdown() const;
 		ENGINE_API void Reload();
 	private:
 		void LoadModule(const std::filesystem::path& module_path);
@@ -33,6 +34,7 @@ namespace Engine {
 
 		bool m_initialized;
 		scene_init_f m_init_f;
+		scene_update_fixed_f m_update_fixed_f;
 		scene_update_f m_update_f;
 		scene_render_f m_render_f;
 		scene_shutdown_f m_shutdown_f;

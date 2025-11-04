@@ -15,6 +15,11 @@
 #include <memory>
 #include <map>
 
+#ifdef _DEBUG
+#include <engine/perf_profiler.hpp>
+PerfProfiler gProfiler;
+#endif
+
 namespace Engine {
 	DebugLayer::DebugLayer() : ILayer("DebugLayer") {}
 
@@ -70,7 +75,7 @@ namespace Engine {
 			std::map<std::string, std::vector<std::pair<std::string, std::shared_ptr<IResource>>>> grouped;
 
 			for (const auto& [key, resource] : cache) {
-				// Extract type from key (format is "typename:path")
+				// Extract type from key (format is "typename|path:sub")
 				size_t colonPos = key.find('|');
 				if (colonPos != std::string::npos) {
 					std::string type = key.substr(0, colonPos);
@@ -124,6 +129,26 @@ namespace Engine {
 							}
 							else if (auto model = std::dynamic_pointer_cast<Model>(resource)) {
 								ImGui::Text("Meshes: %zu", model->meshes.size());
+                                ImGui::Text("Bounds:");
+                                //
+                                ImGui::Columns(3, "bounds_min", false);
+                                ImGui::Text("X: %.3f", model->bounds.min.x);
+                                ImGui::NextColumn();
+                                ImGui::Text("Y: %.3f", model->bounds.min.y);
+                                ImGui::NextColumn();
+                                ImGui::Text("Z: %.3f", model->bounds.min.z);
+                                //
+                                ImGui::Columns(1);
+                                ImGui::Spacing();
+                                //
+                                ImGui::Columns(3, "bounds_max", false);
+                                ImGui::Text("X: %.3f", model->bounds.max.x);
+                                ImGui::NextColumn();
+                                ImGui::Text("Y: %.3f", model->bounds.max.y);
+                                ImGui::NextColumn();
+                                ImGui::Text("Z: %.3f", model->bounds.max.z);
+                                //
+                                ImGui::Columns(1);
 							}
 
 							ImGui::TreePop();
@@ -540,6 +565,18 @@ namespace Engine {
         }
         ImGui::End();
     }
+
+    void DrawPerf() {
+        #ifdef _DEBUG
+        if (ImGui::Begin("Performance metrics")) {
+            for (auto& [name, s] : gProfiler.getSections()) {
+                ImGui::Text("%s: avg %.2f | min %.2f | max %.2f | p99 %.2f | last %.2f ms",
+                    name.c_str(), s.avg(), s.min(), s.max(), s.p99(), s.last);
+            }
+        }
+        ImGui::End();
+        #endif
+    }
 	
     void DebugLayer::OnRender(const std::vector<entity_id>& updatedEntities) {
 		(void)updatedEntities;
@@ -548,6 +585,7 @@ namespace Engine {
 		DrawResourceViewer();
 		DrawModuleViewer();
         DrawHierarchyViewer(updatedEntities);
+        DrawPerf();
 
 		End();
 	}

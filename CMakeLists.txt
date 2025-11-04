@@ -82,3 +82,7 @@ add_subdirectory(engine)
 add_subdirectory(runtime)
 add_subdirectory(apps/demo)
 add_subdirectory(apps/dev)
+
+# ---- Dev QoL ----
+add_dependencies(runtime scene_dev scene_demo)
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT runtime)

@@ -247,7 +247,8 @@ namespace Engine::Log {
         auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
         g_logger = std::make_shared<spdlog::logger>("engine", spdlog::sinks_init_list{ console_sink, file_sink });
         g_logger->set_pattern("[%H:%M:%S] [thread %t] %v");
-        g_logger->set_level(spdlog::level::debug);
+        console_sink->set_level(spdlog::level::trace);
+        file_sink->set_level(spdlog::level::err);
         g_logger->info("Debug logging initialized, outputting to console and {}", debug_filename);
         g_logger->flush_on(spdlog::level::err);
 #else

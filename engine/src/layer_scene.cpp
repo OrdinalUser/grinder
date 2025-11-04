@@ -40,7 +40,7 @@ namespace Engine {
 
 		auto start = std::chrono::high_resolution_clock::now();
 
-		vec3 lightDir = vec3(0, -1, 0); // shines from above
+		vec3 lightDir = -viewPos; // shines from camera
 		vec3 lightColor = vec3(1, 1, 1);
 
 		for (auto [entity, transform, drawable] : ecs->View<Component::Transform, Component::Drawable3D>()) {
@@ -69,6 +69,10 @@ namespace Engine {
 
 	void SceneLayer::OnUpdate(float deltaTime) {
 		m_Scene->Update(deltaTime);
+	}
+
+	void SceneLayer::OnUpdateFixed(float deltaTime) {
+		m_Scene->UpdateFixed(deltaTime);
 	}
 
 	void SceneLayer::Reload() {

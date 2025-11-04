@@ -158,6 +158,19 @@ namespace Engine {
             quat rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
             vec3 scale{ 1.0f };
             mat4 modelMatrix{ 1.0f };
+
+            // Local direction vectors
+            vec3 Forward() const {
+                return glm::normalize(rotation * vec3(0.0f, 0.0f, -1.0f));
+            }
+
+            vec3 Right() const {
+                return glm::normalize(rotation * vec3(1.0f, 0.0f, 0.0f));
+            }
+
+            vec3 Up() const {
+                return glm::normalize(rotation * vec3(0.0f, 1.0f, 0.0f));
+            }
         };
 
         // No default initialization, please tread carefully
@@ -187,7 +200,7 @@ namespace Engine {
                 float fovDegrees = 60.0f,
                 float aspect = 16.0f / 9.0f,
                 float nearPlane = 0.1f,
-                float farPlane = 100.0f,
+                float farPlane = 300.0f,
                 bool main = false
             ) {
                 Camera cam;

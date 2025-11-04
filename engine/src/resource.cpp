@@ -4,7 +4,9 @@
 
 // Image handling
 #define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include <stb_image.h>
+#include <stb_image_resize.h>
 
 // 3D model handling
 #include <assimp/Importer.hpp>
@@ -17,6 +19,116 @@
 #include <fstream>
 #include <functional>
 
+// Helper to compile a single shader stage
+static unsigned int compileShader(GLenum type, const std::string& source, const std::string& name) {
+    unsigned int shader = glCreateShader(type);
+    const char* src = source.c_str();
+    glShaderSource(shader, 1, &src, nullptr);
+    glCompileShader(shader);
+
+    // Check compilation status
+    int success;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetShaderInfoLog(shader, 512, nullptr, infoLog);
+        glDeleteShader(shader);
+
+        const char* stageType = (type == GL_VERTEX_SHADER) ? "VERTEX" : "FRAGMENT";
+        ENGINE_THROW(std::string("Shader compilation failed (") + stageType + " - " + name + "): " + infoLog);
+    }
+
+    return shader;
+}
+
+// Helper to read file contents
+static std::string readFile(const std::filesystem::path& path) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        ENGINE_THROW("Failed to open file: " + path.string());
+    }
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
+}
+
+// Helper to resize image data
+static unsigned char* resizeImage(unsigned char* original, int orig_w, int orig_h, int channels,
+    int new_w, int new_h) {
+    unsigned char* resized = (unsigned char*)malloc(new_w * new_h * channels);
+    if (!resized) return nullptr;
+
+    // Use stbir for high-quality resize
+    if (!stbir_resize_uint8(original, orig_w, orig_h, 0,
+        resized, new_w, new_h, 0, channels)) {
+        free(resized);
+        return nullptr;
+    }
+
+    return resized;
+}
+
+// Calculate dimensions maintaining aspect ratio
+static std::pair<int, int> calculateResizeDimensions(int orig_w, int orig_h,
+    int target_w, int target_h,
+    bool maintain_aspect) {
+    if (target_w == 0 && target_h == 0) {
+        return { orig_w, orig_h };  // No resize
+    }
+
+    if (!maintain_aspect) {
+        return { target_w > 0 ? target_w : orig_w,
+                target_h > 0 ? target_h : orig_h };
+    }
+
+    // Maintain aspect ratio
+    if (target_w == 0) {
+        float ratio = (float)target_h / orig_h;
+        return { (int)(orig_w * ratio), target_h };
+    }
+    if (target_h == 0) {
+        float ratio = (float)target_w / orig_w;
+        return { target_w, (int)(orig_h * ratio) };
+    }
+
+    // Both specified - fit within bounds
+    float ratio = std::min((float)target_w / orig_w, (float)target_h / orig_h);
+    return { (int)(orig_w * ratio), (int)(orig_h * ratio) };
+}
+
+GLenum toGLFilter(Engine::LoadCfg::TextureFilter filter) {
+    switch (filter) {
+        case Engine::LoadCfg::TextureFilter::Nearest: return GL_NEAREST;
+        case Engine::LoadCfg::TextureFilter::Linear: return GL_LINEAR;
+        case Engine::LoadCfg::TextureFilter::NearestMipmapNearest: return GL_NEAREST_MIPMAP_NEAREST;
+        case Engine::LoadCfg::TextureFilter::LinearMipmapNearest: return GL_LINEAR_MIPMAP_NEAREST;
+        case Engine::LoadCfg::TextureFilter::NearestMipmapLinear: return GL_NEAREST_MIPMAP_LINEAR;
+        case Engine::LoadCfg::TextureFilter::LinearMipmapLinear: return GL_LINEAR_MIPMAP_LINEAR;
+        default: return GL_LINEAR;
+    }
+}
+
+GLenum toGLWrap(Engine::LoadCfg::TextureWrap wrap) {
+    switch (wrap) {
+        case Engine::LoadCfg::TextureWrap::Repeat: return GL_REPEAT;
+        case Engine::LoadCfg::TextureWrap::MirroredRepeat: return GL_MIRRORED_REPEAT;
+        case Engine::LoadCfg::TextureWrap::ClampToEdge: return GL_CLAMP_TO_EDGE;
+        case Engine::LoadCfg::TextureWrap::ClampToBorder: return GL_CLAMP_TO_BORDER;
+        default: return GL_REPEAT;
+    }
+}
+
+GLenum getGLFormat(int channels) {
+    switch (channels) {
+        case 1: return GL_RED;
+        case 2: return GL_RG;
+        case 3: return GL_RGB;
+        case 4: return GL_RGBA;
+        default: return GL_RGB;
+    }
+}
+
 namespace Engine {
     namespace DefaultAssets {
         ENGINE_API std::shared_ptr<Texture> GetDefaultColorTexture() {
@@ -28,20 +140,52 @@ namespace Engine {
         }
     };
 
-    template<>
-    ENGINE_API std::shared_ptr<Image> ResourceLoader<Image>::load(const std::filesystem::path& path) {
+    std::shared_ptr<Image> ResourceLoader::load(const std::filesystem::path& path, const LoadCfg::Image& cfg) {
         auto img = std::make_shared<Image>();
-        
+
+        // Set flip flag before loading
+        stbi_set_flip_vertically_on_load(cfg.flip_vertically);
+
+        // Load image with desired format
+        int desired_channels = static_cast<int>(cfg.format);
+        int original_channels;
+
         img->data = stbi_load(
-            path.string().c_str(), 
-            &img->width, &img->height, &img->channels, 0
+            path.string().c_str(),
+            &img->width, &img->height, &original_channels,
+            desired_channels  // 0 = auto, 1-4 = force specific format
         );
-        
+
         if (!img->data) {
-            ENGINE_THROW("Failed to load image from " + path.string());
-            return nullptr;
+            ENGINE_THROW("Failed to load image from " + path.string() + ": " + std::string(stbi_failure_reason()));
         }
-        
+
+        // Set actual channel count
+        img->channels = (desired_channels == 0) ? original_channels : desired_channels;
+
+        // Handle resizing if requested
+        if (cfg.width > 0 || cfg.height > 0) {
+            auto [new_w, new_h] = calculateResizeDimensions(
+                img->width, img->height,
+                cfg.width, cfg.height,
+                cfg.maintain_aspect
+            );
+
+            if (new_w != img->width || new_h != img->height) {
+                unsigned char* resized = resizeImage(img->data, img->width, img->height,
+                    img->channels, new_w, new_h);
+                if (!resized) {
+                    stbi_image_free(img->data);
+                    ENGINE_THROW("Failed to resize image from " + path.string());
+                }
+
+                stbi_image_free(img->data);
+                img->data = resized;
+                img->width = new_w;
+                img->height = new_h;
+            }
+        }
+
         return img;
     }
 
@@ -51,7 +195,7 @@ namespace Engine {
         height = other.height;
         other.id = 0;
     }
-    
+
     Texture& Texture::operator=(Texture&& other) noexcept {
         if (this != &other) {
             glDeleteTextures(1, &id);
@@ -91,90 +235,101 @@ namespace Engine {
         if (id) glDeleteTextures(1, &id);
     }
 
-    template<>
-    ENGINE_API std::shared_ptr<Shader> ResourceLoader<Shader>::load(const std::filesystem::path& path) {
+    const Model::MeshCollection& Component::Drawable3D::GetCollection() const {
+        return model->collections[collectionIndex];
+    }
+
+    std::shared_ptr<Shader> ResourceLoader::load(const std::filesystem::path& path, const LoadCfg::Shader& cfg) {
         auto shader = std::make_shared<Shader>();
-        
-        // Load vertex and fragment shaders
-        // Convention: path.vert and path.frag
+
+        // Build shader file paths
         auto vertPath = path.string() + "_vert.glsl";
         auto fragPath = path.string() + "_frag.glsl";
-        
-        // Read files
-        std::ifstream vShaderFile(vertPath);
-        std::ifstream fShaderFile(fragPath);
-        
-        if (!vShaderFile.is_open() || !fShaderFile.is_open()) {
-            ENGINE_THROW("Failed to open shader source codes for " + path.string());
-            return nullptr;
+
+        // Read shader source files
+        std::string vertCode = readFile(vertPath);
+        std::string fragCode = readFile(fragPath);
+
+        // Compile shader stages
+        unsigned int vertShader = compileShader(GL_VERTEX_SHADER, vertCode, path.filename().string());
+        unsigned int fragShader = 0;
+
+        try {
+            fragShader = compileShader(GL_FRAGMENT_SHADER, fragCode, path.filename().string());
         }
-        
-        std::stringstream vss, fss;
-        vss << vShaderFile.rdbuf();
-        fss << fShaderFile.rdbuf();
-        
-        std::string vertCode = vss.str();
-        std::string fragCode = fss.str();
-        
-        // Compile shaders
-        unsigned int vertex = glCreateShader(GL_VERTEX_SHADER);
-        unsigned int fragment = glCreateShader(GL_FRAGMENT_SHADER);
-        
-        const char* vCode = vertCode.c_str();
-        const char* fCode = fragCode.c_str();
-        
-        glShaderSource(vertex, 1, &vCode, nullptr);
-        glCompileShader(vertex);
-        // TODO: Check compilation errors
-        
-        glShaderSource(fragment, 1, &fCode, nullptr);
-        glCompileShader(fragment);
-        // TODO: Check compilation errors
-        
-        // Link program
+        catch (...) {
+            glDeleteShader(vertShader);
+            throw;
+        }
+
+        // Link shader program
         shader->program = glCreateProgram();
-        glAttachShader(shader->program, vertex);
-        glAttachShader(shader->program, fragment);
+        glAttachShader(shader->program, vertShader);
+        glAttachShader(shader->program, fragShader);
         glLinkProgram(shader->program);
-        // TODO: Check linking errors
-        
-        glDeleteShader(vertex);
-        glDeleteShader(fragment);
-        
+
+        // Check linking status
+        int success;
+        glGetProgramiv(shader->program, GL_LINK_STATUS, &success);
+        if (!success) {
+            char infoLog[512];
+            glGetProgramInfoLog(shader->program, 512, nullptr, infoLog);
+
+            glDeleteShader(vertShader);
+            glDeleteShader(fragShader);
+            glDeleteProgram(shader->program);
+
+            ENGINE_THROW("Shader linking failed (" + path.string() + "): " + infoLog);
+        }
+
+        // Cleanup shader objects (no longer needed after linking)
+        glDeleteShader(vertShader);
+        glDeleteShader(fragShader);
+
         return shader;
     }
 
-    template<>
-    ENGINE_API std::shared_ptr<Texture> ResourceLoader<Texture>::load(const std::filesystem::path& path) {
+    std::shared_ptr<Texture> ResourceLoader::load(const std::filesystem::path& path, const LoadCfg::Texture& cfg) {
+        // First, load the image using Image loader with inherited config
+        LoadCfg::Image img_cfg;
+        img_cfg.format = cfg.format;
+        img_cfg.flip_vertically = cfg.flip_vertically;
+        img_cfg.width = cfg.width;
+        img_cfg.height = cfg.height;
+        img_cfg.maintain_aspect = cfg.maintain_aspect;
+
+        auto image = ResourceLoader::load(path, img_cfg);
+        if (!image || !image->data) {
+            ENGINE_THROW("Failed to load image for texture: " + path.string());
+        }
+
+        // Create OpenGL texture
         auto tex = std::make_shared<Texture>();
+        tex->width = image->width;
+        tex->height = image->height;
 
-        // Load image data
-        int channels;
-        unsigned char* data = stbi_load(
-            path.string().c_str(),
-            &tex->width, &tex->height, &channels, 0
-        );
-        if (!data) return nullptr;
-
-        // Create OpenGL texture and upload image
         glGenTextures(1, &tex->id);
         glBindTexture(GL_TEXTURE_2D, tex->id);
 
-        GLenum format = (channels == 4) ? GL_RGBA : GL_RGB;
+        // Upload texture data
+        GLenum format = getGLFormat(image->channels);
         glTexImage2D(
-            GL_TEXTURE_2D, 0, format, tex->width, tex->height,
-            0, format, GL_UNSIGNED_BYTE, data
+            GL_TEXTURE_2D, 0, format,
+            tex->width, tex->height, 0,
+            format, GL_UNSIGNED_BYTE, image->data
         );
 
-        // Texture params
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        
-        // Cleanup
-        stbi_image_free(data);
+        // Set texture parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, toGLFilter(cfg.min_filter));
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, toGLFilter(cfg.mag_filter));
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, toGLWrap(cfg.wrap_s));
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, toGLWrap(cfg.wrap_t));
+
+        // Generate mipmaps if requested
+        if (cfg.generate_mipmaps) {
+            glGenerateMipmap(GL_TEXTURE_2D);
+        }
+
         glBindTexture(GL_TEXTURE_2D, 0);
 
         return tex;
@@ -201,8 +356,7 @@ namespace Engine {
         return t;
     }
 
-    template<>
-    ENGINE_API std::shared_ptr<Model> ResourceLoader<Model>::load(const std::filesystem::path& path) {
+    std::shared_ptr<Model> ResourceLoader::load(const std::filesystem::path& path, const LoadCfg::Model& cfg) {
         Assimp::Importer importer;
         const aiScene* scene = importer.ReadFile(
             path.string(),
@@ -211,22 +365,40 @@ namespace Engine {
             aiProcess_CalcTangentSpace |
             aiProcess_JoinIdenticalVertices |
             aiProcess_ImproveCacheLocality |
-            aiProcess_OptimizeMeshes
-            // tried aiProcess_OptimizeGraph but that broke imported hierarchy
+            aiProcess_OptimizeMeshes |
+            (cfg.flip_uvs ? aiProcess_FlipUVs : 0) |
+            (cfg.static_mesh ? aiProcess_OptimizeGraph : 0)
         );
 
         if (!scene || !scene->mRootNode || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) {
             ENGINE_THROW("Failed to load model: " + std::string(importer.GetErrorString()));
             return nullptr;
         }
-        
+
         std::shared_ptr<Model> model = std::make_shared<Model>();
-        
+
         /// Start loading shit 2
 
         Application& app = Application::Get();
         Ref<VFS> vfs = app.GetVFS();
         Ref<ResourceSystem> rs = app.GetResourceSystem();
+
+        // Calculate bounds across all meshes
+        glm::vec3 minBounds(FLT_MAX);
+        glm::vec3 maxBounds(-FLT_MAX);
+        float normalizeScale = 1.0f;
+        glm::vec3 normalizeCenter(0.0f);
+
+        for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
+            aiMesh* m = scene->mMeshes[i];
+            for (unsigned int v = 0; v < m->mNumVertices; ++v) {
+                glm::vec3 pos = { m->mVertices[v].x, m->mVertices[v].y, m->mVertices[v].z };
+                minBounds = glm::min(minBounds, pos);
+                maxBounds = glm::max(maxBounds, pos);
+            }
+        }
+        model->bounds.min = minBounds;
+        model->bounds.max = maxBounds;
 
         // Load meshes
         model->meshes.reserve(scene->mNumMeshes);
@@ -257,7 +429,7 @@ namespace Engine {
             indices.shrink_to_fit();
             model->meshes.emplace_back(vertices, indices);
         }
-        model->meshes.shrink_to_fit(); // kinda scared to put this here due to gpu ownership
+        // model->meshes.shrink_to_fit(); // kinda scared to put this here due to gpu ownership
 
         // Load materials
         model->materials.reserve(scene->mNumMaterials);
@@ -266,7 +438,7 @@ namespace Engine {
             Material material;
 
             // Helper: load texture from material (handles embedded + external)
-            auto loadTexture = [mat, path, scene](aiTextureType type) -> optional<std::shared_ptr<Texture>> {
+            auto loadTexture = [mat, path, scene, rs, i](aiTextureType type) -> optional<std::shared_ptr<Texture>> {
                 if (mat->GetTextureCount(type) > 0) {
                     aiString str;
                     mat->GetTexture(type, 0, &str);
@@ -281,6 +453,7 @@ namespace Engine {
                         img.width = tex->mWidth;
                         img.height = tex->mHeight;
                         img.channels = 4;
+                        img.m_path = path;
 
                         // If compressed (e.g. jpg/png in memory)
                         if (tex->mHeight == 0) {
@@ -298,18 +471,21 @@ namespace Engine {
                             img.data = reinterpret_cast<unsigned char*>(tex->pcData);
                         }
 
-                        return std::make_shared<Texture>(img);
+                        // Also add to the resource system
+                        std::shared_ptr<Texture> texture = std::make_shared<Texture>(img);
+                        rs->cache<Texture>(img.m_path.string() + ":" + std::to_string(i), texture);
+                        return texture;
                     }
 
                     // External texture path
                     auto texPath = path.parent_path() / str.C_Str();
-                    auto img = ResourceLoader<Image>::load(texPath);
+                    Ref<Image> img = ResourceLoader::load(texPath, LoadCfg::Image());
                     return std::make_shared<Texture>(*img);
                 }
 
                 // No texture found
                 return {};
-            };
+                };
 
             // Load possible texture maps
             material.diffuse = loadTexture(aiTextureType_DIFFUSE).value_or(DefaultAssets::GetDefaultColorTexture());
@@ -324,14 +500,14 @@ namespace Engine {
             if (AI_SUCCESS == mat->Get(AI_MATKEY_COLOR_SPECULAR, color))
                 material.specularColor = { color.r, color.g, color.b };
 
-            float shininess = 32.0f;
-            mat->Get(AI_MATKEY_SHININESS, shininess);
+            constexpr float SHININESS_DEFAULT = 32.0f;
+            float shininess = SHININESS_DEFAULT;
+            if (AI_SUCCESS != mat->Get(AI_MATKEY_SHININESS, shininess) || shininess <= 0.0f)
+                shininess = SHININESS_DEFAULT;
             material.shininess = shininess;
 
             // Default shader
-            material.shader = rs->load<Shader>(
-                vfs->GetEngineResourcePath("assets/shaders/blinn_phong")
-            );
+            material.shader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/blinn_phong"));
 
             model->materials.push_back(material);
         }
@@ -423,38 +599,38 @@ namespace Engine {
         if (program) glDeleteProgram(program);
     }
 
-    u32 Shader::GetUniformLoc(const std::string& name) {
+    u32 Shader::GetUniformLoc(const std::string& name) const {
         return glGetUniformLocation(program, name.c_str());
     }
 
-    void Shader::SetUniform(const std::string& name, float v) {
+    void Shader::SetUniform(const std::string& name, const float v) const {
         glUniform1f(GetUniformLoc(name), v);
     }
 
-    void Shader::SetUniform(const std::string& name, vec2& v) {
+    void Shader::SetUniform(const std::string& name, const vec2& v) const {
         glUniform2f(GetUniformLoc(name), v.x, v.y);
     }
 
-    void Shader::SetUniform(const std::string& name, vec3& v) {
+    void Shader::SetUniform(const std::string& name, const vec3& v) const {
         glUniform3f(GetUniformLoc(name), v.x, v.y, v.z);
     }
 
-    void Shader::SetUniform(const std::string& name, vec4& v) {
+    void Shader::SetUniform(const std::string& name, const vec4& v) const {
         glUniform4f(GetUniformLoc(name), v.x, v.y, v.z, v.w);
     }
 
-    void Shader::SetUniform(const std::string& name, mat4& v) {
+    void Shader::SetUniform(const std::string& name, const mat4& v) const {
         glUniformMatrix4fv(GetUniformLoc(name), 1, GL_FALSE, glm::value_ptr(v));
     }
 
-    void Shader::SetUniform(const std::string& name, const Texture& tex, TextureSlot slot) {
+    void Shader::SetUniform(const std::string& name, const Texture& tex, const TextureSlot slot) const {
         GLenum texSlot = GL_TEXTURE0 + static_cast<GLenum>(slot);
         glActiveTexture(texSlot);
         glBindTexture(GL_TEXTURE_2D, tex.id);
         glUniform1i(GetUniformLoc(name), static_cast<GLint>(slot));
     }
 
-    void Shader::SetUniform(Material& m) {
+    void Shader::SetUniform(const Material& m) const {
         // Push color & shininess
         SetUniform("material.diffuseColor", m.diffuseColor);
         SetUniform("material.specularColor", m.specularColor);

@@ -18,55 +18,60 @@ Camera* camComp = nullptr;
 Ref<ECS> ecs;
 Ref<VFS> vfs;
 
-extern "C" {
-    void scene_init(scene_data_t scene_data) {
-        // Scene preamble
-        Application& app = Application::Get();
-        ecs = app.GetECS();
-        vfs = app.GetVFS();
-        Ref<ResourceSystem> rs = app.GetResourceSystem();
-        auto module_name = string(scene_data.module_name);
+void scene_init(scene_data_t scene_data) {
+    // Scene preamble
+    Application& app = Application::Get();
+    ecs = app.GetECS();
+    vfs = app.GetVFS();
+    Ref<ResourceSystem> rs = app.GetResourceSystem();
+    auto module_name = string(scene_data.module_name);
 
-        // Setup camera
-        camera = ecs->CreateEntity3D(null, Component::Transform(), "Main Camera");
-        auto& cam = ecs->AddComponent<Camera>(camera, Camera::Perspective());
-        cam.isMain = true;
-        camComp = &cam;
+    // Setup camera
+    camera = ecs->CreateEntity3D(null, Component::Transform(), "Main Camera");
+    auto& cam = ecs->AddComponent<Camera>(camera, Camera::Perspective());
+    cam.isMain = true;
+    camComp = &cam;
 
-        // Load and instantiate our 3D model
-        Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/red_car.glb"));
-        car = ecs->Instantiate(null, Component::Transform(), model);
+    // Load and instantiate our 3D model
+    LoadCfg::Model modelConf;
+    modelConf.normalize = true;
+
+    Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/red_car.glb"), LoadCfg::Model{});
+    car = ecs->Instantiate(null, Component::Transform(), model);
+}
+
+void scene_update_fixed(float deltaTime) {
+    return;
+}
+
+void scene_update(float deltaTime) {
+    // Rotate camera around origin
+    static float angle = 0.0f;
+    constexpr float ROTATION_SPEED = 0.05f;
+    angle += ROTATION_SPEED * deltaTime;
+
+    constexpr float radius = 2.5;
+    auto trans = ecs->GetTransformRef(camera);
+    float camX = radius * cos(angle);
+    float camZ = radius * sin(angle);
+    trans.SetPosition(vec3(camX, 1, camZ));
+    camComp->LookAt(trans.GetPosition());
+
+    // Rotate car wheels
+    constexpr float WHEEL_ROTATION_SPEED = 5.0f;
+    auto ecs = Application::Get().GetECS();
+    for (entity_id child : ChildrenRange(ecs.get(), car)) {
+        auto transformRef = ecs->GetTransformRef(child);
+        transformRef.RotateAround({ 0.0f, 1.0f, 0.0f }, glm::radians(WHEEL_ROTATION_SPEED * deltaTime));
     }
+}
 
-    void scene_update(float deltaTime) {
-        // Rotate camera around origin
-        static float angle = 0.0f;
-        constexpr float ROTATION_SPEED = 0.05f;
-        angle += ROTATION_SPEED * deltaTime;
+void scene_render() {
+    return;
+}
 
-        constexpr float radius = 2.5f;
-        auto trans = ecs->GetTransformRef(camera);
-        float camX = radius * cos(angle);
-        float camZ = radius * sin(angle);
-        trans.SetPosition(vec3(camX, 1.0f, camZ));
-        camComp->LookAt(trans.GetPosition());
-
-        // Rotate car wheels
-        constexpr float WHEEL_ROTATION_SPEED = 5.0f;
-        auto ecs = Application::Get().GetECS();
-        for (entity_id child : ChildrenRange(ecs.get(), car)) {
-            auto transformRef = ecs->GetTransformRef(child);
-            transformRef.RotateAround({ 0.0f, 1.0f, 0.0f }, glm::radians(WHEEL_ROTATION_SPEED * deltaTime));
-        }
-    }
-
-    void scene_render() {
-
-    }
-
-    void scene_shutdown() {
-
-    }
+void scene_shutdown() {
+    return;
 }
 
 //// Many entities test

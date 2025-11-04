@@ -45,26 +45,27 @@ int main() {
 
             // Create our application
             Engine::Application app(window, vfs, rs, ecs);
-            
+
             // load our scene as a layer
-            #if _DEBUG
-            // Thanks CMake for marking my lib with 'd'
-            const std::string dllName = "scene_demod.dll";
+            const std::string scene_name = "dev";
+#if _DEBUG
+// Thanks CMake for marking my lib with 'd'
+            const std::string dllName = "scene_" + scene_name + "d.dll";
             const std::filesystem::path dllPath = std::filesystem::path("build/bin") / "Debug" / dllName;
-            #else
-            const std::string dllName = "scene_demo.dll";
+#else
+            const std::string dllName = "scene_" + scene_name + ".dll";
             const std::filesystem::path dllPath = std::filesystem::path("build/bin") / "Release" / dllName;
-            #endif // _DEBUG
+#endif // _DEBUG
             app.PushLayer(static_cast<ILayer*>(new SceneLayer(new Scene(
                 dllPath,
-                std::filesystem::path("apps/dev")
+                std::filesystem::path("apps") / scene_name
             ))));
-            
-            #ifdef _DEBUG
+
+#ifdef _DEBUG
             // Push debug layer as an overlay
             app.PushLayer(static_cast<ILayer*>(new DebugLayer()));
-            #endif
-            
+#endif
+
             app.Run();
         }
     }

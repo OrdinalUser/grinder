@@ -430,6 +430,7 @@ namespace Engine {
 		ENGINE_API const Component::Transform& GetTransform() const; // read-only view
 		ENGINE_API void SetTransform(Component::Transform& transform); // copy into our data, isDirty=true
 
+		// Local transforms
 		ENGINE_API vec3 GetPosition() const;
 		ENGINE_API void SetPosition(vec3 position);
 
@@ -438,12 +439,25 @@ namespace Engine {
 		ENGINE_API void SetRotation(vec3 euler);
 		ENGINE_API void SetRotation(quat rotation);
 
-		ENGINE_API void RotateAround(vec3 axis, float radians);
-
 		ENGINE_API vec3 GetScale() const;
 		ENGINE_API void SetScale(vec3 scale);
+
+		// Directions
+		ENGINE_API vec3 Forward() const;
+		ENGINE_API vec3 Right() const;
+		ENGINE_API vec3 Up() const;
+
+		// Utility
+		ENGINE_API void RotateAround(vec3 axis, float radians);
+		ENGINE_API void Translate(const vec3& delta);
+		ENGINE_API void MoveTowards(const vec3& targetPos, float speed);
+		ENGINE_API void RotateTowards(const quat& targetRotation, float maxRadians);
+		ENGINE_API void RotateTowards(const vec3& targetEuler, float maxRadians);
+
 	private:
 		ENGINE_API RefTransform(ECS& ecs, entity_id entity, Component::Transform& transform, TransformSystem& system);
+		ENGINE_API mat4 GetParentWorldMatrix() const;
+
 		Component::Transform& data;
 		entity_id id;
 		ECS& ecs;

@@ -23,6 +23,9 @@ namespace Engine {
 		// Called every frame for logic updates
 		ENGINE_API virtual void OnUpdate(float deltaTime) {}
 
+		// Called every fixed frame for physics updates
+		ENGINE_API virtual void OnUpdateFixed(float deltaTime) {}
+
 		// called every frame for rendering
 		ENGINE_API virtual void OnRender(const std::vector<entity_id>& updatedEntities) {}
 
@@ -69,8 +72,9 @@ namespace Engine {
 
 		ENGINE_API void OnAttach() override;
 		ENGINE_API void OnDetach() override;
-		ENGINE_API void OnRender(const std::vector<entity_id>& updatedEntities) override;
+		ENGINE_API void OnUpdateFixed(float deltaTime) override;
 		ENGINE_API void OnUpdate(float deltaTime) override;
+		ENGINE_API void OnRender(const std::vector<entity_id>& updatedEntities) override;
 		ENGINE_API void Reload();
 	private:
 		std::unique_ptr<Scene> m_Scene;

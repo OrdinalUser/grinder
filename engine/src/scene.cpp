@@ -12,6 +12,7 @@ namespace Engine {
 
 		if (!(m_init_f = (scene_init_f)GetProcAddress(m_module, "scene_init"))) ENGINE_THROW("Failed to load init function from " + module_path.string());
 		if (!(m_update_f = (scene_update_f)GetProcAddress(m_module, "scene_update"))) ENGINE_THROW("Failed to load update function from " + module_path.string());
+		if (!(m_update_fixed_f = (scene_update_fixed_f)GetProcAddress(m_module, "scene_update_fixed"))) ENGINE_THROW("Failed to load update function from " + module_path.string());
 		if (!(m_render_f = (scene_render_f)GetProcAddress(m_module, "scene_render"))) ENGINE_THROW("Failed to load render function from " + module_path.string());
 		if (!(m_shutdown_f = (scene_shutdown_f)GetProcAddress(m_module, "scene_shutdown"))) ENGINE_THROW("Failed to load shutdown function from " + module_path.string());
 		#endif
@@ -24,6 +25,7 @@ namespace Engine {
 
 		m_module = nullptr;
 		m_init_f = nullptr;
+		m_update_fixed_f = nullptr;
 		m_update_f = nullptr;
 		m_render_f = nullptr;
 		m_shutdown_f = nullptr;
@@ -61,15 +63,19 @@ namespace Engine {
 		m_init_f(data);
 	}
 
-	void Scene::Update(float dt) {
-		m_update_f(dt);
+	void Scene::Update(float deltaTime) const {
+		m_update_f(deltaTime);
 	}
 
-	void Scene::Render() {
+	void Scene::UpdateFixed(float deltaTime) const {
+		m_update_fixed_f(deltaTime);
+	}
+
+	void Scene::Render() const {
 		m_render_f();
 	}
 
-	void Scene::Shutdown() {
+	void Scene::Shutdown() const {
 		 m_shutdown_f();
 	}
 
