@@ -14,7 +14,7 @@
 using namespace Engine;
 using namespace Engine::Component;
 
-entity_id car = null, camera = null;
+entity_id car = null, camera = null, big_H =null, small_H = null,grass  = null,road = null,pummp = null;
 Camera* camComp = nullptr;
 Ref<ECS> ecs;
 Ref<VFS> vfs;
@@ -133,7 +133,7 @@ public:
     }
 
     // Draw polygons
-    void render(const glm::mat4& viewMatrix ) {
+    void render( glm::mat4& viewMatrix ) {
         // Update GPU uniforms
         shader->Enable();
         shader->SetUniform("ModelMatrix", modelMatrix);
@@ -151,75 +151,47 @@ public:
     // Optional 3D model buildings (loaded from assets)
     Ref<Model> bigModel = nullptr;
     Ref<Model> smallModel = nullptr;
+    Ref<Model> grassModel = nullptr;
+    Ref<Model> roadModel = nullptr;
+    Ref<Model> pummpModel = nullptr;
     City() {}
 
     void generate() {
         // R = 0 (Road), S = 2 (Small Building), B = 1 (Big Building), G = 4 (Grass), P = 3 (Gas Pump), T = 5 (Trees)
         std::vector<std::vector<int>> cityMap = {
-            {1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {4,4,4,4,4,0,0,4,4,4,0,0,4,4,4,4,4,0,4,4,4,4,4,4,0,4,4,4,4,4,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,4,1,1,1,4,0,4,4,1,1,1,4,0,4,4,4,4,4,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,0,0,0,2,2,2,0,0,4,1,1,1,4,0,4,4,1,1,1,4,0,4,4,4,4,4,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,4,1,1,1,4,0,4,4,1,1,1,4,0,4,4,4,31,31,31,32,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,4,0,4,31,31,31,32,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,4,1,1,1,4,0,4,4,1,1,1,4,0,4,4,4,32,32,32,32,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,4,1,1,1,4,0,4,4,1,1,1,4,0,4,4,4,32,32,32,32,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,0,0,0,2,2,2,0,0,4,1,1,1,4,0,4,4,1,1,1,4,0,4,4,4,4,0,0,0,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,4,4,4,4,4,0,4,4,4,4,4,4,0,4,4,4,4,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,2,2,2,0,0,0,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,4,0,4,4,4,0,4,4,0,4,4,4,0,4,4,4,4,0,4,4,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,0,0,0,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,4,0,4,4,4,0,4,4,0,4,4,4,0,4,4,4,4,0,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,0,0,0,2,2,2,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,0,0,0,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,4,0,4,4,4,0,4,4,0,4,4,4,0,4,4,4,4,0,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,2,2,2,0,0,0,2,2,2,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,5,4,5,4,5,4,5,5,4,5,4,5,4,5,5,4,5,4,5,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,1,1,1,4,1,1,1,4,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,0,0,0,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,4,0,4,4,4,0,4,4,0,4,4,4,0,4,4,4,4,0,4,4,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,0,0,0,2,2,2,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,5,4,5,4,5,4,5,5,4,5,4,5,4,5,5,4,5,4,5,4,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,0,0,0,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,1,1,1,4,1,1,1,1,1,1,4,1,1,1,1,4,1,1,1,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,4,0,4,4,4,0,4,4,0,4,4,4,0,4,4,4,4,0,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,2,2,2,0,0,0,2,2,2,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,2,2,2,4,0,4,2,2,2,0,0,5,4,5,4,5,4,5,5,4,5,4,5,4,5,5,4,5,4,5,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,4,0,0,4,4,4},
-            {0,1,1,1,4,4,2,2,2,4,0,0,1,1,1,0,4,2,2,4,1,1,1,4,0,4,4,2,2,2,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,1,1,1,4,4,2,2,2,4,0,0,1,1,1,0,4,2,2,4,1,1,1,4,0,4,4,2,2,2,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4},
-            {0,1,1,1,4,4,2,2,2,4,0,0,1,1,1,0,4,4,4,4,1,1,1,4,0,4,4,2,2,2,4,4,0,0,1,1,1,4,4,4,0,0,4,4,4}
+    {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4},
+    {4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4},
+    {2,0,2,4,2,0,2,4,4,0,4,4,4,0,4,4,4,2,4,2,0,4,1,0,2,2,0,4},
+    {4,0,4,4,4,0,4,4,1,0,1,4,2,0,4,4,4,4,4,4,0,1,4,0,4,4,0,4},
+    {2,0,2,4,2,0,2,4,4,0,4,4,4,0,4,4,5,4,4,2,0,4,1,0,2,2,0,4},
+    {4,0,4,4,4,0,4,4,4,0,4,4,2,0,4,5,0,0,0,4,0,1,4,0,4,4,0,4},
+    {2,0,2,4,2,0,2,4,1,0,1,4,4,0,4,4,0,3,0,2,0,4,1,0,2,2,0,4},
+    {4,0,4,4,4,0,4,4,4,0,4,4,2,0,4,4,0,0,0,4,0,1,4,0,4,4,0,4},
+    {2,0,2,4,2,0,2,4,4,0,1,4,4,0,4,4,4,0,0,1,0,4,1,0,2,2,0,4},
+    {4,0,4,4,4,0,4,4,1,0,0,0,0,0,0,0,0,0,0,0,0,1,4,0,4,4,0,4},
+    {2,0,2,4,2,0,2,4,4,0,4,4,4,4,4,4,4,4,4,0,0,0,0,0,0,0,0,4},
+    {4,0,4,4,4,0,4,4,4,0,4,1,4,1,4,1,4,1,4,0,4,4,4,0,4,2,0,4},
+    {2,0,2,4,2,0,2,4,1,0,4,0,4,0,4,0,4,0,4,0,1,4,1,0,2,4,0,4},
+    {4,0,4,4,4,0,4,4,4,0,0,0,0,0,0,0,0,0,0,0,4,4,4,0,4,2,0,4},
+    {2,0,2,4,2,0,2,4,4,0,4,0,4,0,4,0,4,0,4,0,1,4,1,0,2,4,0,4},
+    {4,0,4,4,4,0,4,4,1,0,4,1,4,1,4,1,4,1,4,0,4,4,4,0,4,2,0,4},
+    {2,0,2,4,2,0,2,4,4,0,4,4,4,4,4,4,4,4,4,0,1,4,1,0,2,4,0,4},
+    {4,0,4,4,4,0,4,4,4,0,0,0,0,0,0,0,0,0,0,0,4,4,4,0,4,2,0,4},
+    {2,0,2,4,2,0,2,4,1,0,4,0,4,0,4,0,4,0,4,0,5,4,5,5,4,5,0,4},
+    {4,0,4,4,4,0,4,4,4,0,4,1,4,1,4,1,4,1,4,0,4,4,4,4,4,5,0,4},
+    {2,0,2,4,2,0,2,4,4,0,4,4,4,4,4,4,4,4,4,0,4,4,4,4,4,5,0,4},
+    {4,0,4,4,4,0,4,4,1,0,4,0,4,0,4,0,4,0,4,0,0,0,0,0,0,0,0,4},
+    {2,0,2,4,2,0,2,4,4,0,0,0,0,0,0,0,0,0,0,0,1,4,1,4,1,4,0,4},
+    {4,0,4,4,4,0,4,4,4,0,4,0,4,0,4,0,4,0,4,0,4,4,4,4,4,4,0,4},
+    {2,0,2,4,2,0,2,4,1,0,4,1,4,1,4,1,4,1,4,0,4,4,4,4,4,4,0,4},
+    {2,0,2,4,2,0,2,4,4,0,4,4,4,4,4,4,4,4,4,0,4,1,4,1,4,1,0,4},
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,0,0,4},
+    {0,4,4,4,4,0,4,0,4,0,4,2,4,2,4,2,4,2,4,0,1,4,1,4,1,4,0,4},
+    {0,4,4,4,4,0,0,1,0,0,4,4,4,4,4,4,4,4,4,0,4,4,4,4,4,4,0,4},
+    {0,4,4,4,4,0,4,0,4,0,5,4,5,4,5,4,5,4,5,0,4,1,4,1,4,1,0,4},
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4},
+    {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4}
+
         };
 
         float tileSize = 2.0f;
@@ -246,18 +218,9 @@ public:
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     // Optionally scale the model to roughly cover 3x3 tiles
-                    ref.SetScale({ 3.0f * (tileSize / 2.0f), 3.0f * (tileSize / 2.0f), 3.0f * (tileSize / 2.0f) });
-
-                    // mark neighbors as occupied
-                    for (int dz = -1; dz <= 1; dz++) {
-                        for (int dx = -1; dx <= 1; dx++) {
-                            int nz = z + dz;
-                            int nx = x + dx;
-                            if (nz >= 0 && nz < rows && nx >= 0 && nx < cols) {
-                                if (!(dz == 0 && dx == 0)) cityMap[nz][nx] = -1;
-                            }
-                        }
-                    }
+                    ref.SetScale({ tileSize,4,tileSize });
+                    
+                    
                     continue;
                 }
                 else if (tile == 2 && smallModel) {
@@ -267,19 +230,49 @@ public:
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({ 2.0f * (tileSize / 2.0f), 2.0f * (tileSize / 2.0f), 2.0f * (tileSize / 2.0f) });
 
-                    // mark neighbors as occupied
-                    for (int dz = -1; dz <= 1; dz++) {
-                        for (int dx = -1; dx <= 1; dx++) {
-                            int nz = z + dz;
-                            int nx = x + dx;
-                            if (nz >= 0 && nz < rows && nx >= 0 && nx < cols) {
-                                if (!(dz == 0 && dx == 0)) cityMap[nz][nx] = -1;
-                            }
-                        }
-                    }
+                   
+                    continue;
+                }else if (tile ==4 && grassModel) {
+                    // Instantiate small building model centered on this tile, occupying 3x3
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), grassModel);
+                    auto ref = ecs->GetTransformRef(e);
+                    ref.SetPosition({ worldX, 0.0f, worldZ });
+                    ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
                     continue;
                 }
-
+                else if (tile == 0 && roadModel){
+                    // Instantiate small building model centered on this tile, occupying 3x3
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), roadModel);
+                    auto ref = ecs->GetTransformRef(e);
+                    ref.SetPosition({ worldX, 0.0f, worldZ });
+                    ref.SetScale({  (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
+                    continue;
+                }
+                else if (tile == 3 && pummpModel) {
+                    // Instantiate small building model centered on this tile, occupying 3x3
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), pummpModel);
+                    auto ref = ecs->GetTransformRef(e);
+                    ref.SetPosition({ worldX, 0.0f, worldZ });
+                    ref.SetScale({ (tileSize / 2.0f), 0.75f,  (tileSize / 2.0f) });
+                    continue;
+                }
+                else if (tile == 5 && smallModel) {
+                    // Instantiate small building model centered on this tile, occupying 3x3
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), smallModel);
+                    auto ref = ecs->GetTransformRef(e);
+                    ref.SetPosition({ worldX, 0.0f, worldZ });
+                    ref.SetScale({ 2.0f * (tileSize / 2.0f), 2.0f * (tileSize / 2.0f), 2.0f * (tileSize / 2.0f) });
+                    continue;
+                }
+                else if (tile == 7 && roadModel) {
+                    // Instantiate small building model centered on this tile, occupying 3x3
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), roadModel);
+                    auto ref = ecs->GetTransformRef(e);
+                    ref.SetPosition({ worldX, 0.0f, worldZ });
+                    ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
+                    continue;
+                    std::cout << worldX << "|" << worldZ << std::endl;
+                }
                 // Fallback: create cube for other tiles
                 auto obj = std::make_unique<Cube>();
                 obj->shader = shader;
@@ -289,7 +282,7 @@ public:
                     obj->scale = { tileSize / 2.0f,  1.0f, tileSize / 2.0f };
                     obj->color = { 0.8,0.6,0.4 };
                 }
-                else if (tile == 31) {
+                else if (tile == 3) {
                     // Gas pump
                     obj->position = { worldX, 0.75f, worldZ };
                     obj->scale = { tileSize / 2.0f, 0.75f, tileSize / 2.0f };
@@ -297,8 +290,8 @@ public:
                 }
                 else if (tile == 1) {
                     // Big Building
-                    obj->position = { worldX, 5.0f, worldZ };  // y = half height to sit on ground
-                    obj->scale = { tileSize / 2.0f, 5.0f, tileSize / 2.0f };
+                    obj->position = { worldX, 0.0f, worldZ };  // y = half height to sit on ground
+                    obj->scale = { tileSize / 2.0f, tileSize / 2.0f, tileSize / 2.0f };
                     obj->color = { 0.6,0.6,0.6 };//{colorDist(gen), colorDist(gen) * 0.8f, colorDist(gen) * 0.9f};
                 }
                 else if (tile == 2) {
@@ -306,19 +299,6 @@ public:
                     obj->position = { worldX, 2.0f, worldZ };  // y = half height
                     obj->scale = { tileSize / 2.0f, 2.0f, tileSize / 2.0f };
                     obj->color = { 0.1,0.3,0.9 };//{colorDist(gen), colorDist(gen) * 0.8f, colorDist(gen) * 0.9f};
-                }
-                else if (tile == 32) {
-                    auto obj2 = std::make_unique<Cube>();
-                    obj2->shader = shader;
-                    obj2->init();
-                    obj->position = { worldX, 1.5f, worldZ };
-                    obj->scale = { tileSize / 2.0f, 0.05f, tileSize / 2.0f };
-                    obj->color = { 1.0f, 0.8f, 0.0f };
-                    obj2->position = { worldX, 0.01f, worldZ };
-                    obj2->scale = { tileSize / 2.0f, 0.01f, tileSize / 2.0f };
-                    obj2->color = { 0.3f, 0.3f, 0.3f };
-                    obj2->updateModelMatrix();
-                    objects.push_back(std::move(obj2));
                 }
                 else if (tile == 4) {
                     // Grass
@@ -347,7 +327,7 @@ public:
         }
     }
 
-    void render(const glm::mat4& viewMatrix) {
+    void render( glm::mat4& viewMatrix) {
         for (auto& o : objects)
             o->render(viewMatrix);
     }
@@ -368,10 +348,15 @@ enum CarState {
     TURNING_RIGHT,
     STOPPED
 };
-
+enum cameraMode {
+    CAMERA_FOLLOW,
+    TRACKING,
+    SPIN
+};
+static cameraMode camMode = TRACKING;
 static CarState carState = MOVE_LEFT;
 static float carYaw = 0.0f; // radians
-static float carSpeed = 1.0f; // world units per second
+static float carSpeed = 3.0f; // world units per second
 
 extern "C" {
     
@@ -395,26 +380,46 @@ extern "C" {
         Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/red_car.glb"));
         car = ecs->Instantiate(null, Component::Transform(), model);
         auto carT = ecs->GetTransformRef(car);
-        carT.SetPosition({ 15,1.5,54 });
+        carT.SetPosition({ 20,1,20 });
         carT.SetRotation(glm::angleAxis(1.5708f,glm::vec3({0,1,0})));
+        carT.SetScale(glm::vec3(0.75, 0.75, 0.75));
 
 
     // Load building models (if present) and assign to city
     try{
-    city.bigModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_building.glb"));
+    Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H.glb"));
+    
+    city.bigModel = cityModel;
     } catch (...) {
         city.bigModel = nullptr;
     }
-    try{
+    try {
         
-    
-    city.smallModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/small_house.glb"));
+    Ref<Model> grass = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/grass.glb"));
+    city.grassModel = grass;
     } catch (...) {
         city.smallModel = nullptr;
     }
+    try {
+        Ref<Model> road = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/road.glb"));
+        city.roadModel = road;
+    } catch (...) {
+        city.roadModel = nullptr;
+    }try{
+        Ref<Model> small_H = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/small_b.glb"));
+    city.smallModel = small_H;
+    } catch (...) {
+        city.smallModel = nullptr;
+    }try{
+        Ref<Model> pummp = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/gas_pump.glb"));
+        city.pummpModel = pummp;
+    }catch (...) {
+        city.pummpModel = nullptr;
+         }
     city.shader = shader;
     city.generate();
-    }
+}
+    
 
     void scene_update(float deltaTime) {
         // Get car transform
@@ -425,33 +430,46 @@ extern "C" {
         // Extract car's Y-axis rotation (yaw)
         glm::vec3 carEuler = glm::eulerAngles(carRot);
         float carYaw = carEuler.y;
+        switch (camMode) {
+        case CAMERA_FOLLOW:
+            {
+            // Smooth rotation interpolation
+            smoothCarRotation = glm::mix(smoothCarRotation, carYaw, 0.1f);
 
-        // Smooth rotation interpolation
-        smoothCarRotation = glm::mix(smoothCarRotation, carYaw, 0.1f);
+            // Camera follows behind the car
+            float distance = 8.0f;  // distance behind car
+            float height = 8.0f;     // height above car
 
-        // Camera follows behind the car
-        float distance = 15.0f;  // distance behind car
-        float height = 8.0f;     // height above car
+            // Calculate camera offset in car's local space
+            glm::vec3 localOffset = glm::vec3(
+                sin(smoothCarRotation) * distance,
+                height,
+                cos(smoothCarRotation) * distance
+            );
 
-        // Calculate camera offset in car's local space
-        glm::vec3 localOffset = glm::vec3(
-            sin(smoothCarRotation) * distance,
-            height,
-            cos(smoothCarRotation) * distance
-        );
+            glm::vec3 targetCamPos = carPos + localOffset;
 
-        glm::vec3 targetCamPos = carPos + localOffset;
+            // Smooth camera position follow
+            smoothCamPos = glm::mix(smoothCamPos, targetCamPos, 0.1f);
 
-        // Smooth camera position follow
-        smoothCamPos = glm::mix(smoothCamPos, targetCamPos, 0.1f);
+            // Update camera entity transform
+            auto cameraTransform = ecs->GetTransformRef(camera);
+            cameraTransform.SetPosition(smoothCamPos);
 
-        // Update camera entity transform
-        auto cameraTransform = ecs->GetTransformRef(camera);
-        cameraTransform.SetPosition(smoothCamPos);
+            // Make camera look at car
+            camComp->LookAt(smoothCamPos, carPos);
+            }        break; 
+        case TRACKING:
+            {
+            // Fixed tracking position
+            glm::vec3 trackingPos = glm::vec3(-12.0f, 10.0f, 22.0f);
+            auto cameraTransform = ecs->GetTransformRef(camera);
+            cameraTransform.SetPosition(trackingPos);
 
-        // Make camera look at car
-        camComp->LookAt(smoothCamPos, carPos);
-
+            // Make camera look at car
+            camComp->LookAt(trackingPos, carPos);
+            } break;
+    }
         // Rotate car wheels
         constexpr float WHEEL_ROTATION_SPEED = 5.0f;
  
@@ -464,8 +482,8 @@ extern "C" {
             case MOVE_LEFT:
                 pos.x -= carSpeed * deltaTime;
 
-                if (pos.x < -23.0f) {
-                    pos.x = -23.0f;
+                if (pos.x < -10.0f) {
+                    pos.x = -10.0f;
                     carState = FIRST_TURN;
                 }
                 break;
@@ -477,11 +495,12 @@ extern "C" {
                 }
                 break;
             case MOVING_FORWARD:
+                camMode = CAMERA_FOLLOW;
                 pos.z -= carSpeed * deltaTime;
                 carYaw = 0.0f;
-                if (pos.z <= -34.0f) {
+                if (pos.z <= -13.5f) {
                     carState = TURNING;
-                    pos.z = -34.0f; // Snap to exact position
+                    pos.z = -13.5f; // Snap to exact position
                 }
                 break;
             case TURNING:
@@ -493,9 +512,9 @@ extern "C" {
                 break;
             case TURNING_RIGHT:
                 pos.x += carSpeed * deltaTime;
-                if (pos.x >= 11.0f) {
+                if (pos.x >= 4.0f) {
                     carState = STOPPED;
-                    pos.x = 11.0f;
+                    pos.x = 4.0f;
                 }
                 break;
             case STOPPED:
@@ -506,7 +525,6 @@ extern "C" {
             carTransform.SetPosition(pos);
             carTransform.SetRotation(glm::angleAxis(carYaw, glm::vec3(0.0f, 1.0f, 0.0f)));
         }
-    carTransform.SetScale({ 1.5f, 1.5f, 1.5f });
     }
 
     void scene_render() {
