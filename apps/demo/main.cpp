@@ -540,4 +540,8 @@ extern "C" {
     void scene_shutdown() {
 
     }
+
+    void scene_update_fixed(float deltaTime) {
+        return;
+    }
 }

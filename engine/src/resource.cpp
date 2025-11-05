@@ -4,9 +4,9 @@
 
 // Image handling
 #define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#define STB_IMAGE_RESIZE2_IMPLEMENTATION
 #include <stb_image.h>
-#include <stb_image_resize.h>
+#include <stb_image_resize2.h>
 
 // 3D model handling
 #include <assimp/Importer.hpp>
@@ -56,12 +56,14 @@ static std::string readFile(const std::filesystem::path& path) {
 // Helper to resize image data
 static unsigned char* resizeImage(unsigned char* original, int orig_w, int orig_h, int channels,
     int new_w, int new_h) {
-    unsigned char* resized = (unsigned char*)malloc(new_w * new_h * channels);
+    unsigned char* resized = (unsigned char*)malloc((size_t)new_w * new_h * channels);
     if (!resized) return nullptr;
 
-    // Use stbir for high-quality resize
-    if (!stbir_resize_uint8(original, orig_w, orig_h, 0,
-        resized, new_w, new_h, 0, channels)) {
+    // v2: cast channels to stbir_pixel_layout and call the linear helper
+    if (!stbir_resize_uint8_linear(
+        original, orig_w, orig_h, 0,
+        resized, new_w, new_h, 0,
+        (stbir_pixel_layout)channels)) {
         free(resized);
         return nullptr;
     }
@@ -99,33 +101,33 @@ static std::pair<int, int> calculateResizeDimensions(int orig_w, int orig_h,
 
 GLenum toGLFilter(Engine::LoadCfg::TextureFilter filter) {
     switch (filter) {
-        case Engine::LoadCfg::TextureFilter::Nearest: return GL_NEAREST;
-        case Engine::LoadCfg::TextureFilter::Linear: return GL_LINEAR;
-        case Engine::LoadCfg::TextureFilter::NearestMipmapNearest: return GL_NEAREST_MIPMAP_NEAREST;
-        case Engine::LoadCfg::TextureFilter::LinearMipmapNearest: return GL_LINEAR_MIPMAP_NEAREST;
-        case Engine::LoadCfg::TextureFilter::NearestMipmapLinear: return GL_NEAREST_MIPMAP_LINEAR;
-        case Engine::LoadCfg::TextureFilter::LinearMipmapLinear: return GL_LINEAR_MIPMAP_LINEAR;
-        default: return GL_LINEAR;
+    case Engine::LoadCfg::TextureFilter::Nearest: return GL_NEAREST;
+    case Engine::LoadCfg::TextureFilter::Linear: return GL_LINEAR;
+    case Engine::LoadCfg::TextureFilter::NearestMipmapNearest: return GL_NEAREST_MIPMAP_NEAREST;
+    case Engine::LoadCfg::TextureFilter::LinearMipmapNearest: return GL_LINEAR_MIPMAP_NEAREST;
+    case Engine::LoadCfg::TextureFilter::NearestMipmapLinear: return GL_NEAREST_MIPMAP_LINEAR;
+    case Engine::LoadCfg::TextureFilter::LinearMipmapLinear: return GL_LINEAR_MIPMAP_LINEAR;
+    default: return GL_LINEAR;
     }
 }
 
 GLenum toGLWrap(Engine::LoadCfg::TextureWrap wrap) {
     switch (wrap) {
-        case Engine::LoadCfg::TextureWrap::Repeat: return GL_REPEAT;
-        case Engine::LoadCfg::TextureWrap::MirroredRepeat: return GL_MIRRORED_REPEAT;
-        case Engine::LoadCfg::TextureWrap::ClampToEdge: return GL_CLAMP_TO_EDGE;
-        case Engine::LoadCfg::TextureWrap::ClampToBorder: return GL_CLAMP_TO_BORDER;
-        default: return GL_REPEAT;
+    case Engine::LoadCfg::TextureWrap::Repeat: return GL_REPEAT;
+    case Engine::LoadCfg::TextureWrap::MirroredRepeat: return GL_MIRRORED_REPEAT;
+    case Engine::LoadCfg::TextureWrap::ClampToEdge: return GL_CLAMP_TO_EDGE;
+    case Engine::LoadCfg::TextureWrap::ClampToBorder: return GL_CLAMP_TO_BORDER;
+    default: return GL_REPEAT;
     }
 }
 
 GLenum getGLFormat(int channels) {
     switch (channels) {
-        case 1: return GL_RED;
-        case 2: return GL_RG;
-        case 3: return GL_RGB;
-        case 4: return GL_RGBA;
-        default: return GL_RGB;
+    case 1: return GL_RED;
+    case 2: return GL_RG;
+    case 3: return GL_RGB;
+    case 4: return GL_RGBA;
+    default: return GL_RGB;
     }
 }
 
@@ -537,7 +539,7 @@ namespace Engine {
                 processNode(node->mChildren[i], thisIdx);
 
             return thisIdx;
-        };
+            };
 
         processNode(scene->mRootNode, null);
 
