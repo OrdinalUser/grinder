@@ -52,7 +52,7 @@ namespace Engine {
 			auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
 			if (self) self->Resize(width, height);
 		});
-		glfwSwapInterval(0); // Turn on V-Sync
+		glfwSwapInterval(1); // Turn on V-Sync
 	}
 
 	void Window::Shutdown() {

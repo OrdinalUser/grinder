@@ -26,8 +26,11 @@ namespace Engine {
 		// Called every fixed frame for physics updates
 		ENGINE_API virtual void OnUpdateFixed(float deltaTime) {}
 
-		// called every frame for rendering
+		// Called every frame for rendering
 		ENGINE_API virtual void OnRender(const std::vector<entity_id>& updatedEntities) {}
+
+		// Called when reload requested
+		ENGINE_API virtual void OnReload() {}
 
 		ENGINE_API const std::string& GetName() const { return m_DebugName; }
 	protected:
@@ -42,6 +45,8 @@ namespace Engine {
 
 		ENGINE_API void Push(ILayer* layer);
 		ENGINE_API void Pop(ILayer* layer);
+		
+		ENGINE_API bool empty() const;
 
 		// Convenience iteration
 		ENGINE_API std::vector<ILayer*>::iterator begin() { return m_Layers.begin(); }
@@ -75,7 +80,7 @@ namespace Engine {
 		ENGINE_API void OnUpdateFixed(float deltaTime) override;
 		ENGINE_API void OnUpdate(float deltaTime) override;
 		ENGINE_API void OnRender(const std::vector<entity_id>& updatedEntities) override;
-		ENGINE_API void Reload();
+		ENGINE_API void OnReload() override;
 	private:
 		std::unique_ptr<Scene> m_Scene;
 	};

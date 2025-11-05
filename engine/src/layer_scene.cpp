@@ -75,7 +75,7 @@ namespace Engine {
 		m_Scene->UpdateFixed(deltaTime);
 	}
 
-	void SceneLayer::Reload() {
+	void SceneLayer::OnReload() {
 		m_Scene->Reload();
 	}
 

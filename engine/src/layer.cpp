@@ -25,4 +25,7 @@ namespace Engine {
 		m_Layers.erase(loc);
 	}
 
+	bool LayerStack::empty() const {
+		return m_Layers.empty();
+	}
 }

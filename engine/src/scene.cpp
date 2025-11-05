@@ -81,7 +81,9 @@ namespace Engine {
 
 	void Scene::Reload() {
 		m_initialized = false;
+		Shutdown();
 		UnloadModule();
 		LoadModule(m_path);
+		Init();
 	}
 }

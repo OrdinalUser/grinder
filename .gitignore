@@ -4,4 +4,4 @@ build/
 
 # Dev - Other
 imgui.ini
-docs/
+apps/*/assets/

@@ -47,7 +47,7 @@ void scene_update_fixed(float deltaTime) {
 void scene_update(float deltaTime) {
     // Rotate camera around origin
     static float angle = 0.0f;
-    constexpr float ROTATION_SPEED = 0.05f;
+    constexpr float ROTATION_SPEED = 0.25f;
     angle += ROTATION_SPEED * deltaTime;
 
     constexpr float radius = 2.5;
@@ -71,6 +71,8 @@ void scene_render() {
 }
 
 void scene_shutdown() {
+    ecs->DestroyEntity(camera);
+    ecs->DestroyEntity(car, true);
     return;
 }
 

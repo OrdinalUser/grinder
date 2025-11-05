@@ -27,6 +27,8 @@ namespace Engine {
 		ENGINE_API std::shared_ptr<ResourceSystem> GetResourceSystem() const;
 
 		ENGINE_API std::shared_ptr<ECS> GetECS() const;
+
+		ENGINE_API LayerStack& GetLayerStack();
 	private:
 		std::shared_ptr<Window> m_Window;
 		LayerStack m_LayerStack;

@@ -95,4 +95,8 @@ namespace Engine {
 	std::shared_ptr<ECS> Application::GetECS() const {
 		return m_Ecs;
 	}
+
+	LayerStack& Application::GetLayerStack() {
+		return m_LayerStack;
+	}
 }

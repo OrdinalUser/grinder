@@ -387,7 +387,7 @@ extern "C" {
 
     // Load building models (if present) and assign to city
     try{
-    Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H.glb"));
+    Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H.glb"), LoadCfg::Model{.static_mesh=true});
     
     city.bigModel = cityModel;
     } catch (...) {
@@ -395,7 +395,7 @@ extern "C" {
     }
     try {
         
-    Ref<Model> grass = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/grass.glb"));
+        Ref<Model> grass = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/grass.glb"));
     city.grassModel = grass;
     } catch (...) {
         city.smallModel = nullptr;
@@ -406,12 +406,12 @@ extern "C" {
     } catch (...) {
         city.roadModel = nullptr;
     }try{
-        Ref<Model> small_H = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/small_b.glb"));
+        Ref<Model> small_H = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/small_b.glb"), LoadCfg::Model{.static_mesh=true});
     city.smallModel = small_H;
     } catch (...) {
         city.smallModel = nullptr;
     }try{
-        Ref<Model> pummp = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/gas_pump.glb"));
+        Ref<Model> pummp = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/gas_pump.glb"), LoadCfg::Model{.static_mesh=true});
         city.pummpModel = pummp;
     }catch (...) {
         city.pummpModel = nullptr;

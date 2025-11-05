@@ -129,9 +129,13 @@ namespace Engine {
 							}
 							else if (auto model = std::dynamic_pointer_cast<Model>(resource)) {
 								ImGui::Text("Meshes: %zu", model->meshes.size());
+                                ImGui::Text("Materials: %zu", model->materials.size());
+                                ImGui::Text("Collections: %zu", model->collections.size());
                                 ImGui::Text("Bounds:");
                                 //
-                                ImGui::Columns(3, "bounds_min", false);
+                                ImGui::Columns(4, "bounds_min", false);
+                                ImGui::Text("Min");
+                                ImGui::NextColumn();
                                 ImGui::Text("X: %.3f", model->bounds.min.x);
                                 ImGui::NextColumn();
                                 ImGui::Text("Y: %.3f", model->bounds.min.y);
@@ -141,7 +145,9 @@ namespace Engine {
                                 ImGui::Columns(1);
                                 ImGui::Spacing();
                                 //
-                                ImGui::Columns(3, "bounds_max", false);
+                                ImGui::Columns(4, "bounds_max", false);
+                                ImGui::Text("Max");
+                                ImGui::NextColumn();
                                 ImGui::Text("X: %.3f", model->bounds.max.x);
                                 ImGui::NextColumn();
                                 ImGui::Text("Y: %.3f", model->bounds.max.y);
@@ -577,6 +583,42 @@ namespace Engine {
         ImGui::End();
         #endif
     }
+
+    void DrawLayerStack() {
+        if (ImGui::Begin("Layer stack")) {
+            Engine::LayerStack& layerStack = Engine::Application::Get().GetLayerStack();
+
+            int index = 0;
+            for (auto it = layerStack.begin(); it != layerStack.end(); ++it, ++index) {
+                ILayer* layer = *it;
+                if (!layer) continue;
+
+                ImGui::PushID(index);
+
+                // Display layer name with selectable style
+                bool open = ImGui::TreeNodeEx(
+                    layer->GetName().c_str(),
+                    ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_FramePadding
+                );
+
+                if (open) {
+                    // Could show additional details here later (profiling, etc.)
+                    ImGui::Text("Address: %p", (void*)layer);
+                    ImGui::SameLine(ImGui::GetWindowWidth() - 80);
+                    if (ImGui::SmallButton("Reload")) {
+                        layer->OnReload();
+                    }
+                    ImGui::TreePop();
+                }
+
+                ImGui::PopID();
+            }
+
+            if (layerStack.empty())
+                ImGui::TextDisabled("No layers loaded.");
+        }
+        ImGui::End();
+    }
 	
     void DebugLayer::OnRender(const std::vector<entity_id>& updatedEntities) {
 		(void)updatedEntities;
@@ -586,6 +628,7 @@ namespace Engine {
 		DrawModuleViewer();
         DrawHierarchyViewer(updatedEntities);
         DrawPerf();
+        DrawLayerStack();
 
 		End();
 	}
