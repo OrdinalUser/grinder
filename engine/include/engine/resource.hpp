@@ -50,8 +50,10 @@ namespace Engine {
         ENGINE_API void SetUniform(const std::string& name, const Texture& tex, const TextureSlot slot) const;
         ENGINE_API void SetUniform(const Material& v) const;
 
-        ENGINE_API void Enable() const;
+        ENGINE_API void Enable();
         ENGINE_API ~Shader();
+    private:
+        unordered_map<std::string, u32> m_CacheLoc;
     };
 
     struct Image : public IResource {
@@ -90,6 +92,7 @@ namespace Engine {
         
         RenderType renderType;
         bool isTransparent;
+        float opacity = 1.0f;
 
         std::shared_ptr<Texture> diffuse;
         std::shared_ptr<Texture> specular;

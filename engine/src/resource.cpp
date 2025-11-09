@@ -551,6 +551,7 @@ namespace Engine {
             if (AI_SUCCESS == mat->Get(AI_MATKEY_OPACITY, opacity)) {
                 if (opacity < 1.0f) {
                     material.isTransparent = true;
+                    material.opacity = opacity;
                 }
             }
 
@@ -857,9 +858,39 @@ namespace Engine {
         if (ebo) glDeleteBuffers(1, &ebo);
     }
 
-    void Shader::Enable() const {
+    void Shader::Enable() {
         if (!program) ENGINE_THROW("Attempting to use uninitialized shader program");
+
         glUseProgram(program);
+
+        if (!m_CacheLoc.empty())
+            return;
+
+        // Build the uniform cache
+        GLint count = 0;
+        glGetProgramiv(program, GL_ACTIVE_UNIFORMS, &count);
+
+        GLint maxNameLen = 0;
+        glGetProgramiv(program, GL_ACTIVE_UNIFORM_MAX_LENGTH, &maxNameLen);
+
+        std::string name;
+        name.resize(maxNameLen);
+
+        for (GLint i = 0; i < count; ++i) {
+            GLsizei length = 0;
+            GLint size = 0;
+            GLenum type = 0;
+            glGetActiveUniform(program, i, maxNameLen, &length, &size, &type, name.data());
+
+            if (length <= 0) continue;
+
+            name[length] = '\0'; // ensure null termination
+
+            GLint loc = glGetUniformLocation(program, name.c_str());
+            if (loc >= 0) {
+                m_CacheLoc.emplace(std::string(name.data(), length), static_cast<u32>(loc));
+            }
+        }
     }
 
     Shader::~Shader() {
@@ -867,7 +898,8 @@ namespace Engine {
     }
 
     u32 Shader::GetUniformLoc(const std::string& name) const {
-        return glGetUniformLocation(program, name.c_str());
+        // return glGetUniformLocation(program, name.c_str());
+        return m_CacheLoc.at(name);
     }
 
     void Shader::SetUniform(const std::string& name, const float v) const {

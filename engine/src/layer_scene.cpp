@@ -55,24 +55,25 @@ namespace Engine {
 
 		// Collect our drawables
 		for (auto [entity, transform, drawable] : ecs->View<Component::Transform, Component::Drawable3D>()) {
-			const Model::MeshCollection& collection = drawable.GetCollection();
-			for (const auto [mesh, material] : collection) {
-				renderer.Queue(&transform, mesh, material);
-				//Engine::Shader& shader = *material->shader;
-				//shader.Enable();
-				//shader.SetUniform(*material);
+			renderer.QueueDrawable3D(&transform, &drawable);
+			//const Model::MeshCollection& collection = drawable.GetCollection();
+			//for (const auto [mesh, material] : collection) {
+			//	renderer.Queue(&transform, mesh, material);
+			//	//Engine::Shader& shader = *material->shader;
+			//	//shader.Enable();
+			//	//shader.SetUniform(*material);
 
-				//shader.SetUniform("uViewPos", viewPos);
-				//shader.SetUniform("uLightPos", lightPos);
-				//shader.SetUniform("uLightColor", lightColor);
+			//	//shader.SetUniform("uViewPos", viewPos);
+			//	//shader.SetUniform("uLightPos", lightPos);
+			//	//shader.SetUniform("uLightColor", lightColor);
 
-				//shader.SetUniform("uModel", transform.modelMatrix);
-				//shader.SetUniform("uProjView", projView);
-				//// shader.SetUniform("uView", mainCam->viewMatrix);
-				//// shader.SetUniform("uProj", mainCam->projectionMatrix);
+			//	//shader.SetUniform("uModel", transform.modelMatrix);
+			//	//shader.SetUniform("uProjView", projView);
+			//	//// shader.SetUniform("uView", mainCam->viewMatrix);
+			//	//// shader.SetUniform("uProj", mainCam->projectionMatrix);
 
-				//mesh->Draw();
-			}
+			//	//mesh->Draw();
+			//}
 		}
 
 		PERF_END("Render_Queue");

@@ -427,7 +427,7 @@ extern "C" {
         camComp = &cam;
         
         // Load and instantiate our 3D model
-        Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/red_car.glb"));
+        Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/car_expo.glb"));
         car = ecs->Instantiate(null, Component::Transform(), model);
         auto carT = ecs->GetTransformRef(car);
         carT.SetPosition({ 20,0.0f,22.5 });

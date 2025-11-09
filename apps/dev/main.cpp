@@ -36,7 +36,7 @@ void scene_init(scene_data_t scene_data) {
     LoadCfg::Model modelConf;
     modelConf.normalize = true;
 
-    Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/red_car.glb"), LoadCfg::Model{});
+    Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/car_expo.glb"), LoadCfg::Model{});
     car = ecs->Instantiate(null, Component::Transform(), model);
 }
 

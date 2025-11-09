@@ -157,8 +157,42 @@ namespace Engine {
                                 ImGui::Columns(1);
 							}
                             else if (auto material = std::dynamic_pointer_cast<Material>(resource)) {
-                                ImGui::Text("Shader Program ID: %u", material->shader->program);
+                                constexpr const char* RENDER_TYPES_STR[] = {
+                                    "UNLIT", "LIT", "TEXTURED"
+                                };
 
+                                ImGui::Text("Shader Program ID: %u", material->shader->program);
+                                ImGui::Text("Type: %s", RENDER_TYPES_STR[(u8)(material->renderType)]);
+                                ImGui::Text("IsTransparent: %u", material->isTransparent);
+                                ImGui::Text("Opacity: %.2f", material->opacity);
+                                if (material->renderType == Material::RenderType::LIT || material->renderType == Material::RenderType::TEXTURED) {
+                                    ImGui::Text("Diffuse color: %.2f %.2f %.2f", material->diffuseColor.r, material->diffuseColor.b, material->diffuseColor.b);
+                                    ImGui::Text("Specular color: %.2f %.2f %.2f", material->specularColor.r, material->specularColor.b, material->specularColor.b);
+                                    ImGui::Text("Shininess: %.2f", material->shininess);
+                                }
+                                if (material->renderType == Material::RenderType::TEXTURED) {
+                                    {
+                                        auto tex = material->diffuse;
+                                        ImGui::Text("Diffuse:");
+                                        float aspect = (float)tex->width / (float)tex->height;
+                                        ImVec2 size(128, 128 / aspect);
+                                        ImGui::Image((void*)(intptr_t)tex->id, size, ImVec2(0, 1), ImVec2(1, 0));
+                                    }
+                                    {
+                                        auto tex = material->specular;
+                                        ImGui::Text("Specular:");
+                                        float aspect = (float)tex->width / (float)tex->height;
+                                        ImVec2 size(128, 128 / aspect);
+                                        ImGui::Image((void*)(intptr_t)tex->id, size, ImVec2(0, 1), ImVec2(1, 0));
+                                    }
+                                    {
+                                        auto tex = material->normal;
+                                        ImGui::Text("Normal:");
+                                        float aspect = (float)tex->width / (float)tex->height;
+                                        ImVec2 size(128, 128 / aspect);
+                                        ImGui::Image((void*)(intptr_t)tex->id, size, ImVec2(0, 1), ImVec2(1, 0));
+                                    }
+                                }
                             }
 
 							ImGui::TreePop();

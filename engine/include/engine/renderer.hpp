@@ -26,6 +26,7 @@ namespace Engine {
             size_t instancedDrawCalls = 0;
             size_t totalObjects = 0;
             size_t batchCount = 0;
+            size_t culledObjects = 0;
         };
         ENGINE_API const Stats& GetStats() const { return m_stats; }
 
@@ -79,6 +80,11 @@ namespace Engine {
             float outerCutoff; // Spot
         };
 
+        // Frustum planes (extracted from projView matrix)
+        struct Frustum {
+            vec4 planes[6]; // left, right, bottom, top, near, far
+        } m_frustum;
+
         // ========== State ==========
 
         // Camera
@@ -123,6 +129,9 @@ namespace Engine {
         void ResizeFramebuffer(int width, int height);
         void CleanupFramebuffer();
         void CreateScreenQuad();
+
+        void ExtractFrustumPlanes();
+        bool IsBoxInFrustum(const BBox& bbox, const mat4& modelMatrix) const;
 
         void BeginFramebufferPass();
         void EndFramebufferPass();

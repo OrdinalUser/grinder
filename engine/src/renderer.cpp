@@ -14,7 +14,8 @@ namespace Engine {
 
         if (m_hasCameraSet) {
             m_projViewMatrix = camera->projectionMatrix * camera->viewMatrix;
-            m_cameraPosition = transform->position;
+            m_cameraPosition = transform->modelMatrix * vec4(transform->position, 1.0f); // TODO
+            ExtractFrustumPlanes();
         }
     }
 
@@ -48,6 +49,24 @@ namespace Engine {
         }
     }
 
+    void Renderer::QueueDrawable3D(Transform* transform, Component::Drawable3D* drawable) {
+        if (!drawable || !drawable->model) return;
+
+        // Frustum culling using model's bounding box
+        if (m_hasCameraSet) {
+            if (!IsBoxInFrustum(drawable->model->bounds, transform->modelMatrix)) {
+                m_stats.culledObjects++;
+                return; // Object is outside frustum, skip
+            }
+        }
+
+        // Queue all mesh entries in the collection
+        const auto& collection = drawable->GetCollection();
+        for (const auto& entry : collection) {
+            Queue(transform, entry.mesh, entry.material);
+        }
+    }
+
     void Renderer::QueueLight(Transform* transform, Light* light) {
         if (!transform || !light) return;
         m_queuedLights.emplace_back(transform, light);
@@ -65,15 +84,15 @@ namespace Engine {
         m_stats.totalObjects += m_transparentQueue.size();
 
         // Process lights into world space
-        ProcessLights();
+        ProcessLights(); // TODO!
 
         // Optional: Render to framebuffer for post-processing
         if (m_useFramebuffer) {
             BeginFramebufferPass();
         }
 
-        // Clear buffers
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        // Setup context
+        // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // cleared outside of renderer!
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
 
@@ -85,9 +104,11 @@ namespace Engine {
             DrawTransparent();
         }
 
+        // Shadows, here?
+
         // Optional: Apply post-processing
         if (m_useFramebuffer) {
-            EndFramebufferPass();
+            EndFramebufferPass(); // TODO
         }
     }
 
@@ -125,7 +146,8 @@ namespace Engine {
     }
 
     void Renderer::SetLightUniforms(Shader* shader) {
-        shader->SetUniform("uLightCount", static_cast<int>(m_processedLights.size()));
+        // TODO: Light integration
+        /*shader->SetUniform("uLightCount", static_cast<int>(m_processedLights.size()));
 
         for (size_t i = 0; i < m_processedLights.size(); ++i) {
             std::string base = "uLights[" + std::to_string(i) + "].";
@@ -139,7 +161,7 @@ namespace Engine {
             shader->SetUniform(base + "range", light.range);
             shader->SetUniform(base + "innerCutoff", light.innerCutoff);
             shader->SetUniform(base + "outerCutoff", light.outerCutoff);
-        }
+        }*/
     }
 
     void Renderer::SetCommonUniforms(Shader* shader) {
@@ -168,6 +190,9 @@ namespace Engine {
                 shader->SetUniform("uMaterial.normalMap", *material->normal, Shader::TextureSlot::NORMAL);
             }
         }
+
+        if (material->isTransparent)
+            shader->SetUniform("uMaterial.opacity", material->opacity);
     }
 
     // ========== Drawing ==========
@@ -213,7 +238,7 @@ namespace Engine {
         std::sort(m_transparentQueue.begin(), m_transparentQueue.end(),
             [](const DrawCommand& a, const DrawCommand& b) {
                 return a.distanceToCamera > b.distanceToCamera;
-            });
+        });
 
         // Enable blending
         glEnable(GL_BLEND);
@@ -228,6 +253,9 @@ namespace Engine {
             SetCommonUniforms(shader);
             SetMaterialUniforms(cmd.material);
             shader->SetUniform("uModel", cmd.transform->modelMatrix);
+
+            shader->SetUniform("uLightPos", m_cameraPosition);
+            shader->SetUniform("uLightColor", vec3(1, 1, 1));
 
             // Draw
             cmd.mesh->Draw();
@@ -345,6 +373,79 @@ namespace Engine {
         glBindVertexArray(0);
 
         glEnable(GL_DEPTH_TEST);
+    }
+
+    // ========== Frustum Culling ==========
+
+    void Renderer::ExtractFrustumPlanes() {
+        // Extract frustum planes from projection * view matrix
+        // Planes are in the form: Ax + By + Cz + D = 0
+        const mat4& m = m_projViewMatrix;
+
+        // Left plane
+        m_frustum.planes[0] = vec4(m[0][3] + m[0][0], m[1][3] + m[1][0], m[2][3] + m[2][0], m[3][3] + m[3][0]);
+
+        // Right plane
+        m_frustum.planes[1] = vec4(m[0][3] - m[0][0], m[1][3] - m[1][0], m[2][3] - m[2][0], m[3][3] - m[3][0]);
+
+        // Bottom plane
+        m_frustum.planes[2] = vec4(m[0][3] + m[0][1], m[1][3] + m[1][1], m[2][3] + m[2][1], m[3][3] + m[3][1]);
+
+        // Top plane
+        m_frustum.planes[3] = vec4(m[0][3] - m[0][1], m[1][3] - m[1][1], m[2][3] - m[2][1], m[3][3] - m[3][1]);
+
+        // Near plane
+        m_frustum.planes[4] = vec4(m[0][3] + m[0][2], m[1][3] + m[1][2], m[2][3] + m[2][2], m[3][3] + m[3][2]);
+
+        // Far plane
+        m_frustum.planes[5] = vec4(m[0][3] - m[0][2], m[1][3] - m[1][2], m[2][3] - m[2][2], m[3][3] - m[3][2]);
+
+        // Normalize planes
+        for (int i = 0; i < 6; ++i) {
+            float length = glm::length(vec3(m_frustum.planes[i]));
+            m_frustum.planes[i] /= length;
+        }
+    }
+
+    bool Renderer::IsBoxInFrustum(const BBox& bbox, const mat4& modelMatrix) const {
+        // Transform bounding box to world space
+        vec3 corners[8] = {
+            vec3(bbox.min.x, bbox.min.y, bbox.min.z),
+            vec3(bbox.max.x, bbox.min.y, bbox.min.z),
+            vec3(bbox.min.x, bbox.max.y, bbox.min.z),
+            vec3(bbox.max.x, bbox.max.y, bbox.min.z),
+            vec3(bbox.min.x, bbox.min.y, bbox.max.z),
+            vec3(bbox.max.x, bbox.min.y, bbox.max.z),
+            vec3(bbox.min.x, bbox.max.y, bbox.max.z),
+            vec3(bbox.max.x, bbox.max.y, bbox.max.z)
+        };
+
+        // Transform all corners to world space
+        for (int i = 0; i < 8; ++i) {
+            vec4 worldPos = modelMatrix * vec4(corners[i], 1.0f);
+            corners[i] = vec3(worldPos) / worldPos.w;
+        }
+
+        // Check each plane
+        for (int p = 0; p < 6; ++p) {
+            int insideCount = 0;
+
+            // Check all 8 corners against this plane
+            for (int c = 0; c < 8; ++c) {
+                float distance = glm::dot(vec3(m_frustum.planes[p]), corners[c]) + m_frustum.planes[p].w;
+                if (distance > 0.0f) {
+                    insideCount++;
+                }
+            }
+
+            // If all corners are outside this plane, the box is outside the frustum
+            if (insideCount == 0) {
+                return false;
+            }
+        }
+
+        // Box intersects or is inside frustum
+        return true;
     }
 
 } // namespace Engine

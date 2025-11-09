@@ -10,11 +10,12 @@ out vec4 FragColor;
 
 struct Material {
     vec3 diffuseColor;
+    float opacity;
 };
 
 uniform Material uMaterial;
 
 void main() {
     // Just output the material color, no lighting
-    FragColor = vec4(uMaterial.diffuseColor, 1.0);
+    FragColor = vec4(uMaterial.diffuseColor, uMaterial.opacity);
 }

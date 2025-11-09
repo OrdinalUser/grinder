@@ -24,3 +24,5 @@ Alternatively run `generate.bat` and pray it works
 - [City Tiles 1](https://poly.pizza/bundle/City-Builder-Bits-1wLdnIddSx)
 - [City Tiles 2](https://sketchfab.com/3d-models/low-poly-city-579d7493dbbc4cfa9fd50dde3df229bb)
 - [Example Building](https://poly.pizza/m/01lqee-dZAr)
+- [Car](https://sketchfab.com/3d-models/low-poly-cartoon-style-car-01-69461da2e3a842c0868f5187c1282674#download)
+  - [author](https://sketchfab.com/arturs.vitas)

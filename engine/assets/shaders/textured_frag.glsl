@@ -14,7 +14,7 @@ struct Material {
     vec3 diffuseColor;
     vec3 specularColor;
     float shininess;
-    
+    float opacity;
     sampler2D diffuseMap;
     sampler2D specularMap;
     sampler2D normalMap;
@@ -60,5 +60,5 @@ void main() {
     vec3 specular = spec * uLightColor * uMaterial.specularColor * texSpecular;
     
     vec3 result = ambient + diffuse + specular;
-    FragColor = vec4(result, 1.0);
+    FragColor = vec4(result, uMaterial.opacity);
 }

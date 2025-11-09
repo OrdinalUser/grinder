@@ -13,12 +13,13 @@ struct Material {
     vec3 diffuseColor;
     vec3 specularColor;
     float shininess;
+    float opacity;
 };
 
 uniform Material uMaterial;
 uniform vec3 uViewPos;
 
-// Placeholder light - you'll expand this later
+// Placeholder light - we'll expand this later
 uniform vec3 uLightPos;
 uniform vec3 uLightColor;
 
@@ -40,5 +41,5 @@ void main() {
     vec3 specular = spec * uLightColor * uMaterial.specularColor;
     
     vec3 result = ambient + diffuse + specular;
-    FragColor = vec4(result, 1.0);
+    FragColor = vec4(result, uMaterial.opacity);
 }
