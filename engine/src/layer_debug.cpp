@@ -156,6 +156,10 @@ namespace Engine {
                                 //
                                 ImGui::Columns(1);
 							}
+                            else if (auto material = std::dynamic_pointer_cast<Material>(resource)) {
+                                ImGui::Text("Shader Program ID: %u", material->shader->program);
+
+                            }
 
 							ImGui::TreePop();
 						}

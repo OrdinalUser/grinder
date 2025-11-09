@@ -4,6 +4,9 @@
 #include <engine/ecs.hpp>
 #include <engine/resource.hpp>
 #include <engine/log.hpp>
+#include <engine/renderer.hpp>
+
+#include <engine/perf_profiler.hpp>
 
 #include <chrono>
 
@@ -24,6 +27,8 @@ namespace Engine {
 		Application& app = Application::Get();
 		std::shared_ptr<ECS> ecs = app.GetECS();
 		
+		Renderer& renderer = app.GetRenderer();
+		PERF_BEGIN("Render_Queue");
 		m_Scene->Render();
 
 		// Get our main camera
@@ -33,37 +38,50 @@ namespace Engine {
 			if (cam.isMain) {
 				mainCam = &cam;
 				viewPos = transform.position;
+				renderer.SetCamera(&transform, &cam);
 				break;
 			}
 		}
 		if (!mainCam) return; // No camera, no rendering :3
 
-		auto start = std::chrono::high_resolution_clock::now();
+		// Get our lights
+		for (auto [entity, transform, light] : ecs->View<Component::Transform, Component::Light>()) {
+			renderer.QueueLight(&transform, &light);
+		}
 
-		vec3 lightDir = -viewPos; // shines from camera
-		vec3 lightColor = vec3(1, 1, 1);
+		// vec3 lightPos = viewPos; // shines from camera
+		// vec3 lightColor = vec3(1, 1, 1);
+		// mat4 projView = mainCam->projectionMatrix * mainCam->viewMatrix;
 
+		// Collect our drawables
 		for (auto [entity, transform, drawable] : ecs->View<Component::Transform, Component::Drawable3D>()) {
 			const Model::MeshCollection& collection = drawable.GetCollection();
 			for (const auto [mesh, material] : collection) {
-				Engine::Shader& shader = *material->shader;
-				shader.Enable();
-				shader.SetUniform(*material);
+				renderer.Queue(&transform, mesh, material);
+				//Engine::Shader& shader = *material->shader;
+				//shader.Enable();
+				//shader.SetUniform(*material);
 
-				shader.SetUniform("uLightDir", lightDir);
-				shader.SetUniform("uViewPos", viewPos);
-				shader.SetUniform("uLightColor", lightColor);
+				//shader.SetUniform("uViewPos", viewPos);
+				//shader.SetUniform("uLightPos", lightPos);
+				//shader.SetUniform("uLightColor", lightColor);
 
-				shader.SetUniform("uModel", transform.modelMatrix); // rotates randomly a little which is GOOD
-				shader.SetUniform("uView", mainCam->viewMatrix);
-				shader.SetUniform("uProj", mainCam->projectionMatrix);
+				//shader.SetUniform("uModel", transform.modelMatrix);
+				//shader.SetUniform("uProjView", projView);
+				//// shader.SetUniform("uView", mainCam->viewMatrix);
+				//// shader.SetUniform("uProj", mainCam->projectionMatrix);
 
-				mesh->Draw();
+				//mesh->Draw();
 			}
 		}
 
-		auto vendor = glGetString(GL_VENDOR);
-		auto end = std::chrono::high_resolution_clock::now();
+		PERF_END("Render_Queue");
+
+		PERF_BEGIN("Render_Draw");
+		renderer.Draw();
+		renderer.Clear();
+		PERF_END("Render_Draw");
+		// auto vendor = glGetString(GL_VENDOR);
 		// Log::info("ECS_iteration: {} ns", std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
 	}
 

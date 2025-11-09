@@ -323,11 +323,14 @@ namespace Engine {
 
 			// Step 2: attach the drawable for this node’s collection
 			if (bp.collectionIndex < model->collections.size()) {
-				auto drawable = Component::Drawable3D{
-					.model = model,
-					.collectionIndex = bp.collectionIndex
-				};
-				AddComponent<Component::Drawable3D>(entity, drawable);
+				// Perhaps it's just an anchor entity and has no drawable data
+				if (model->collections[bp.collectionIndex].size() > 0) {
+					auto drawable = Component::Drawable3D{
+						.model = model,
+						.collectionIndex = bp.collectionIndex
+					};
+					AddComponent<Component::Drawable3D>(entity, drawable);
+				}
 				AddComponent<Component::Name>(entity, Component::Name{.name = bp.name});
 			}
 

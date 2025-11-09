@@ -133,12 +133,30 @@ GLenum getGLFormat(int channels) {
 
 namespace Engine {
     namespace DefaultAssets {
-        ENGINE_API std::shared_ptr<Texture> GetDefaultColorTexture() {
+        std::shared_ptr<Texture> GetDefaultColorTexture() {
             return Application::Get().GetResourceSystem()->load<Texture>(Application::Get().GetVFS()->GetEngineResourcePath("assets/textures/white1x1.png"));
         }
 
-        ENGINE_API std::shared_ptr<Texture> GetDefaultNormalTexture() {
+        std::shared_ptr<Texture> GetDefaultNormalTexture() {
             return Application::Get().GetResourceSystem()->load<Texture>(Application::Get().GetVFS()->GetEngineResourcePath("assets/textures/normal1x1.png"));
+        }
+
+        std::shared_ptr<Shader> GetUnlitShader() {
+            return Application::Get().GetResourceSystem()->load<Shader>(
+                Application::Get().GetVFS()->GetEngineResourcePath("assets/shaders/unlit")
+            );
+        }
+
+        std::shared_ptr<Shader> GetLitShader() {
+            return Application::Get().GetResourceSystem()->load<Shader>(
+                Application::Get().GetVFS()->GetEngineResourcePath("assets/shaders/lit")
+            );
+        }
+
+        std::shared_ptr<Shader> GetTexturedShader() {
+            return Application::Get().GetResourceSystem()->load<Shader>(
+                Application::Get().GetVFS()->GetEngineResourcePath("assets/shaders/textured")
+            );
         }
     };
 
@@ -379,17 +397,29 @@ namespace Engine {
 
         std::shared_ptr<Model> model = std::make_shared<Model>();
 
-        /// Start loading shit 2
-
         Application& app = Application::Get();
         Ref<VFS> vfs = app.GetVFS();
         Ref<ResourceSystem> rs = app.GetResourceSystem();
 
-        // Calculate bounds across all meshes
+        // ========== FIRST PASS: Find which materials are actually used ==========
+        std::unordered_set<unsigned int> usedMaterialIndices;
+
+        std::function<void(aiNode*)> scanNode = [&](aiNode* node) {
+            for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
+                unsigned int meshIdx = node->mMeshes[i];
+                unsigned int matIdx = scene->mMeshes[meshIdx]->mMaterialIndex;
+                usedMaterialIndices.insert(matIdx);
+            }
+            for (unsigned int i = 0; i < node->mNumChildren; ++i) {
+                scanNode(node->mChildren[i]);
+            }
+            };
+
+        scanNode(scene->mRootNode);
+
+        // ========== Calculate bounds across all meshes ==========
         glm::vec3 minBounds(FLT_MAX);
         glm::vec3 maxBounds(-FLT_MAX);
-        float normalizeScale = 1.0f;
-        glm::vec3 normalizeCenter(0.0f);
 
         for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
             aiMesh* m = scene->mMeshes[i];
@@ -402,7 +432,7 @@ namespace Engine {
         model->bounds.min = minBounds;
         model->bounds.max = maxBounds;
 
-        // Load meshes
+        // ========== Load all meshes (we need all since nodes reference them) ==========
         model->meshes.reserve(scene->mNumMeshes);
         for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
             aiMesh* m = scene->mMeshes[i];
@@ -431,70 +461,75 @@ namespace Engine {
             indices.shrink_to_fit();
             model->meshes.emplace_back(vertices, indices);
         }
-        // model->meshes.shrink_to_fit(); // kinda scared to put this here due to gpu ownership
 
-        // Load materials
-        model->materials.reserve(scene->mNumMaterials);
-        for (unsigned int i = 0; i < scene->mNumMaterials; ++i) {
-            aiMaterial* mat = scene->mMaterials[i];
-            Material material;
+        // ========== SECOND PASS: Load only used materials ==========
+        // Create mapping: old material index -> new material index
+        std::unordered_map<unsigned int, unsigned int> materialIndexRemap;
 
-            // Helper: load texture from material (handles embedded + external)
-            auto loadTexture = [mat, path, scene, rs, i](aiTextureType type) -> optional<std::shared_ptr<Texture>> {
-                if (mat->GetTextureCount(type) > 0) {
-                    aiString str;
-                    mat->GetTexture(type, 0, &str);
+        // Helper: load texture from material (handles embedded + external)
+        auto loadTexture = [path, scene, rs](aiMaterial* mat, aiTextureType type, unsigned int matIndex) -> optional<std::shared_ptr<Texture>> {
+            if (mat->GetTextureCount(type) > 0) {
+                aiString str;
+                mat->GetTexture(type, 0, &str);
 
-                    // Embedded texture (*0, *1, etc.)
-                    if (str.C_Str()[0] == '*') {
-                        int texIndex = std::atoi(str.C_Str() + 1);
-                        aiTexture* tex = scene->mTextures[texIndex];
-                        if (!tex) return {};
+                // Embedded texture (*0, *1, etc.)
+                if (str.C_Str()[0] == '*') {
+                    int texIndex = std::atoi(str.C_Str() + 1);
+                    aiTexture* tex = scene->mTextures[texIndex];
+                    if (!tex) return {};
 
-                        Image img{};
-                        img.width = tex->mWidth;
-                        img.height = tex->mHeight;
+                    Image img{};
+                    img.width = tex->mWidth;
+                    img.height = tex->mHeight;
+                    img.channels = 4;
+                    img.m_path = path;
+
+                    // If compressed (e.g. jpg/png in memory)
+                    if (tex->mHeight == 0) {
+                        auto bytes = reinterpret_cast<unsigned char*>(tex->pcData);
+                        int w, h, c;
+                        unsigned char* data = stbi_load_from_memory(bytes, tex->mWidth, &w, &h, &c, 4);
+                        img.width = w;
+                        img.height = h;
                         img.channels = 4;
-                        img.m_path = path;
-
-                        // If compressed (e.g. jpg/png in memory)
-                        if (tex->mHeight == 0) {
-                            // Decode from compressed memory (stb_image or similar)
-                            auto bytes = reinterpret_cast<unsigned char*>(tex->pcData);
-                            int w, h, c;
-                            unsigned char* data = stbi_load_from_memory(bytes, tex->mWidth, &w, &h, &c, 4);
-                            img.width = w;
-                            img.height = h;
-                            img.channels = 4;
-                            img.data = data;
-                        }
-                        else {
-                            // Raw uncompressed BGRA8888
-                            img.data = reinterpret_cast<unsigned char*>(tex->pcData);
-                        }
-
-                        // Also add to the resource system
-                        std::shared_ptr<Texture> texture = std::make_shared<Texture>(img);
-                        rs->cache<Texture>(img.m_path.string() + ":" + std::to_string(i), texture);
-                        return texture;
+                        img.data = data;
+                    }
+                    else {
+                        // Raw uncompressed BGRA8888
+                        img.data = reinterpret_cast<unsigned char*>(tex->pcData);
                     }
 
-                    // External texture path
-                    auto texPath = path.parent_path() / str.C_Str();
-                    Ref<Image> img = ResourceLoader::load(texPath, LoadCfg::Image());
-                    return std::make_shared<Texture>(*img);
+                    std::shared_ptr<Texture> texture = std::make_shared<Texture>(img);
+                    rs->cache<Texture>(path.string() + ":tex:" + std::to_string(matIndex) + ":" + std::to_string(type), texture);
+                    return texture;
                 }
 
-                // No texture found
-                return {};
-                };
+                // External texture path
+                auto texPath = path.parent_path() / str.C_Str();
+                Ref<Image> img = ResourceLoader::load(texPath, LoadCfg::Image());
+                return std::make_shared<Texture>(*img);
+            }
 
-            // Load possible texture maps
-            material.diffuse = loadTexture(aiTextureType_DIFFUSE).value_or(DefaultAssets::GetDefaultColorTexture());
-            material.specular = loadTexture(aiTextureType_SPECULAR).value_or(DefaultAssets::GetDefaultColorTexture());
-            material.normal = loadTexture(aiTextureType_NORMALS).value_or(DefaultAssets::GetDefaultNormalTexture());
+            return {};
+        };
 
-            // Fallback to solid colors if textures are missing
+        model->materials.reserve(usedMaterialIndices.size());
+
+        for (unsigned int oldIdx : usedMaterialIndices) {
+            aiMaterial* mat = scene->mMaterials[oldIdx];
+            Material material;
+
+            // Load textures
+            auto diffuseTex = loadTexture(mat, aiTextureType_DIFFUSE, oldIdx);
+            auto specularTex = loadTexture(mat, aiTextureType_SPECULAR, oldIdx);
+            auto normalTex = loadTexture(mat, aiTextureType_NORMALS, oldIdx);
+
+            // Set textures or defaults
+            material.diffuse = diffuseTex.value_or(DefaultAssets::GetDefaultColorTexture());
+            material.specular = specularTex.value_or(DefaultAssets::GetDefaultColorTexture());
+            material.normal = normalTex.value_or(DefaultAssets::GetDefaultNormalTexture());
+
+            // Load material colors
             aiColor3D color;
             if (AI_SUCCESS == mat->Get(AI_MATKEY_COLOR_DIFFUSE, color))
                 material.diffuseColor = { color.r, color.g, color.b };
@@ -508,14 +543,49 @@ namespace Engine {
                 shininess = SHININESS_DEFAULT;
             material.shininess = shininess;
 
-            // Default shader
-            material.shader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/blinn_phong"));
+            // ========== Determine transparency ==========
+            material.isTransparent = false;
 
-            model->materials.push_back(material);
+            // Check opacity from material
+            float opacity = 1.0f;
+            if (AI_SUCCESS == mat->Get(AI_MATKEY_OPACITY, opacity)) {
+                if (opacity < 1.0f) {
+                    material.isTransparent = true;
+                }
+            }
+
+            // Check if diffuse texture has alpha channel
+            if (diffuseTex.has_value() && !material.isTransparent) {
+                // We can't easily check texture format after upload, but we can check the original image
+                // For now, we'll trust the opacity value or add a check during texture loading
+                // TODO: Could store channel count in Texture struct if needed
+            }
+
+            // ========== Classify material type (highest wins) ==========
+            bool hasAnyTexture = diffuseTex.has_value() || specularTex.has_value() || normalTex.has_value();
+
+            if (hasAnyTexture) {
+                material.renderType = Material::RenderType::TEXTURED;
+                material.shader = DefaultAssets::GetTexturedShader();
+            }
+            else {
+                material.renderType = Material::RenderType::LIT;
+                material.shader = DefaultAssets::GetLitShader();
+            }
+
+            // Store the new index for this material
+            unsigned int newIdx = static_cast<unsigned int>(model->materials.size());
+            materialIndexRemap[oldIdx] = newIdx;
+
+            // Cache the material for debugging
+            material.m_path = path;
+            rs->cache<Material>(path.string() + ":mat:" + std::to_string(oldIdx),
+                std::make_shared<Material>(material));
+
+            model->materials.push_back(std::move(material));
         }
-        // model->materials.shrink_to_fit(); // kinda scared to put this here due to gpu ownership
 
-        // Get hierarchy and construction blueprint
+        // ========== Build hierarchy and collections with remapped indices ==========
         std::function<int(aiNode*, int)> processNode = [&](aiNode* node, entity_id parentBlueprintIdx) -> int {
             Model::BlueprintNode blueprintNode;
             blueprintNode.name = std::string(node->mName.C_Str());
@@ -525,8 +595,15 @@ namespace Engine {
             Model::MeshCollection collection;
             for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
                 unsigned int meshIdx = node->mMeshes[i];
-                unsigned int matIdx = scene->mMeshes[meshIdx]->mMaterialIndex;
-                collection.push_back({ &model->meshes[meshIdx], &model->materials[matIdx] });
+                unsigned int oldMatIdx = scene->mMeshes[meshIdx]->mMaterialIndex;
+
+                // Remap to new material index
+                unsigned int newMatIdx = materialIndexRemap[oldMatIdx];
+
+                collection.push_back({
+                    &model->meshes[meshIdx],
+                    &model->materials[newMatIdx]
+                });
             }
 
             blueprintNode.collectionIndex = model->collections.size();
@@ -539,12 +616,200 @@ namespace Engine {
                 processNode(node->mChildren[i], thisIdx);
 
             return thisIdx;
-            };
+        };
 
         processNode(scene->mRootNode, null);
 
         return model;
     }
+
+    //std::shared_ptr<Model> ResourceLoader::load(const std::filesystem::path& path, const LoadCfg::Model& cfg) {
+    //    Assimp::Importer importer;
+    //    const aiScene* scene = importer.ReadFile(
+    //        path.string(),
+    //        aiProcess_Triangulate |
+    //        aiProcess_GenNormals |
+    //        aiProcess_CalcTangentSpace |
+    //        aiProcess_JoinIdenticalVertices |
+    //        aiProcess_ImproveCacheLocality |
+    //        aiProcess_OptimizeMeshes |
+    //        (cfg.flip_uvs ? aiProcess_FlipUVs : 0) |
+    //        (cfg.static_mesh ? aiProcess_OptimizeGraph : 0)
+    //    );
+
+    //    if (!scene || !scene->mRootNode || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) {
+    //        ENGINE_THROW("Failed to load model: " + std::string(importer.GetErrorString()));
+    //        return nullptr;
+    //    }
+
+    //    std::shared_ptr<Model> model = std::make_shared<Model>();
+
+    //    /// Start loading shit 2
+
+    //    Application& app = Application::Get();
+    //    Ref<VFS> vfs = app.GetVFS();
+    //    Ref<ResourceSystem> rs = app.GetResourceSystem();
+
+    //    // Calculate bounds across all meshes
+    //    glm::vec3 minBounds(FLT_MAX);
+    //    glm::vec3 maxBounds(-FLT_MAX);
+    //    float normalizeScale = 1.0f;
+    //    glm::vec3 normalizeCenter(0.0f);
+
+    //    for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
+    //        aiMesh* m = scene->mMeshes[i];
+    //        for (unsigned int v = 0; v < m->mNumVertices; ++v) {
+    //            glm::vec3 pos = { m->mVertices[v].x, m->mVertices[v].y, m->mVertices[v].z };
+    //            minBounds = glm::min(minBounds, pos);
+    //            maxBounds = glm::max(maxBounds, pos);
+    //        }
+    //    }
+    //    model->bounds.min = minBounds;
+    //    model->bounds.max = maxBounds;
+
+    //    // Load meshes
+    //    model->meshes.reserve(scene->mNumMeshes);
+    //    for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
+    //        aiMesh* m = scene->mMeshes[i];
+    //        std::vector<Vertex> vertices;
+    //        std::vector<u32> indices;
+
+    //        vertices.reserve(m->mNumVertices);
+    //        for (unsigned int v = 0; v < m->mNumVertices; ++v) {
+    //            Vertex vert{};
+    //            vert.position = { m->mVertices[v].x, m->mVertices[v].y, m->mVertices[v].z };
+    //            vert.normal = { m->mNormals[v].x, m->mNormals[v].y, m->mNormals[v].z };
+    //            vert.uv = m->mTextureCoords[0]
+    //                ? glm::vec2(m->mTextureCoords[0][v].x, m->mTextureCoords[0][v].y)
+    //                : glm::vec2(0.0f);
+    //            vert.tangent = m->mTangents
+    //                ? glm::vec3(m->mTangents[v].x, m->mTangents[v].y, m->mTangents[v].z)
+    //                : glm::vec3(0.0f);
+    //            vertices.push_back(vert);
+    //        }
+
+    //        for (unsigned int f = 0; f < m->mNumFaces; ++f)
+    //            for (unsigned int j = 0; j < m->mFaces[f].mNumIndices; ++j)
+    //                indices.push_back(m->mFaces[f].mIndices[j]);
+
+    //        vertices.shrink_to_fit();
+    //        indices.shrink_to_fit();
+    //        model->meshes.emplace_back(vertices, indices);
+    //    }
+    //    // model->meshes.shrink_to_fit(); // kinda scared to put this here due to gpu ownership
+
+    //    // Load materials
+    //    model->materials.reserve(scene->mNumMaterials);
+    //    for (unsigned int i = 0; i < scene->mNumMaterials; ++i) {
+    //        aiMaterial* mat = scene->mMaterials[i];
+    //        Material material;
+
+    //        // Helper: load texture from material (handles embedded + external)
+    //        auto loadTexture = [mat, path, scene, rs, i](aiTextureType type) -> optional<std::shared_ptr<Texture>> {
+    //            if (mat->GetTextureCount(type) > 0) {
+    //                aiString str;
+    //                mat->GetTexture(type, 0, &str);
+
+    //                // Embedded texture (*0, *1, etc.)
+    //                if (str.C_Str()[0] == '*') {
+    //                    int texIndex = std::atoi(str.C_Str() + 1);
+    //                    aiTexture* tex = scene->mTextures[texIndex];
+    //                    if (!tex) return {};
+
+    //                    Image img{};
+    //                    img.width = tex->mWidth;
+    //                    img.height = tex->mHeight;
+    //                    img.channels = 4;
+    //                    img.m_path = path;
+
+    //                    // If compressed (e.g. jpg/png in memory)
+    //                    if (tex->mHeight == 0) {
+    //                        // Decode from compressed memory (stb_image or similar)
+    //                        auto bytes = reinterpret_cast<unsigned char*>(tex->pcData);
+    //                        int w, h, c;
+    //                        unsigned char* data = stbi_load_from_memory(bytes, tex->mWidth, &w, &h, &c, 4);
+    //                        img.width = w;
+    //                        img.height = h;
+    //                        img.channels = 4;
+    //                        img.data = data;
+    //                    }
+    //                    else {
+    //                        // Raw uncompressed BGRA8888
+    //                        img.data = reinterpret_cast<unsigned char*>(tex->pcData);
+    //                    }
+
+    //                    // Also add to the resource system
+    //                    std::shared_ptr<Texture> texture = std::make_shared<Texture>(img);
+    //                    rs->cache<Texture>(img.m_path.string() + ":" + std::to_string(i), texture);
+    //                    return texture;
+    //                }
+
+    //                // External texture path
+    //                auto texPath = path.parent_path() / str.C_Str();
+    //                Ref<Image> img = ResourceLoader::load(texPath, LoadCfg::Image());
+    //                return std::make_shared<Texture>(*img);
+    //            }
+
+    //            // No texture found
+    //            return {};
+    //            };
+
+    //        // Load possible texture maps
+    //        material.diffuse = loadTexture(aiTextureType_DIFFUSE).value_or(DefaultAssets::GetDefaultColorTexture());
+    //        material.specular = loadTexture(aiTextureType_SPECULAR).value_or(DefaultAssets::GetDefaultColorTexture());
+    //        material.normal = loadTexture(aiTextureType_NORMALS).value_or(DefaultAssets::GetDefaultNormalTexture());
+
+    //        // Fallback to solid colors if textures are missing
+    //        aiColor3D color;
+    //        if (AI_SUCCESS == mat->Get(AI_MATKEY_COLOR_DIFFUSE, color))
+    //            material.diffuseColor = { color.r, color.g, color.b };
+
+    //        if (AI_SUCCESS == mat->Get(AI_MATKEY_COLOR_SPECULAR, color))
+    //            material.specularColor = { color.r, color.g, color.b };
+
+    //        constexpr float SHININESS_DEFAULT = 32.0f;
+    //        float shininess = SHININESS_DEFAULT;
+    //        if (AI_SUCCESS != mat->Get(AI_MATKEY_SHININESS, shininess) || shininess <= 0.0f)
+    //            shininess = SHININESS_DEFAULT;
+    //        material.shininess = shininess;
+
+    //        // Default shader
+    //        material.shader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/blinn_phong"));
+
+    //        model->materials.push_back(material);
+    //    }
+    //    // model->materials.shrink_to_fit(); // kinda scared to put this here due to gpu ownership
+
+    //    // Get hierarchy and construction blueprint
+    //    std::function<int(aiNode*, int)> processNode = [&](aiNode* node, entity_id parentBlueprintIdx) -> int {
+    //        Model::BlueprintNode blueprintNode;
+    //        blueprintNode.name = std::string(node->mName.C_Str());
+    //        blueprintNode.parent = parentBlueprintIdx;
+    //        blueprintNode.transform = ConvertToTransform(node->mTransformation);
+
+    //        Model::MeshCollection collection;
+    //        for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
+    //            unsigned int meshIdx = node->mMeshes[i];
+    //            unsigned int matIdx = scene->mMeshes[meshIdx]->mMaterialIndex;
+    //            collection.push_back({ &model->meshes[meshIdx], &model->materials[matIdx] });
+    //        }
+
+    //        blueprintNode.collectionIndex = model->collections.size();
+    //        model->collections.push_back(std::move(collection));
+
+    //        int thisIdx = (int)model->blueprint.size();
+    //        model->blueprint.push_back(blueprintNode);
+
+    //        for (unsigned int i = 0; i < node->mNumChildren; ++i)
+    //            processNode(node->mChildren[i], thisIdx);
+
+    //        return thisIdx;
+    //        };
+
+    //    processNode(scene->mRootNode, null);
+
+    //    return model;
+    //}
 
     void Vertex::SetupVAO() {
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position));
@@ -634,14 +899,16 @@ namespace Engine {
 
     void Shader::SetUniform(const Material& m) const {
         // Push color & shininess
-        SetUniform("material.diffuseColor", m.diffuseColor);
-        SetUniform("material.specularColor", m.specularColor);
-        SetUniform("material.shininess", m.shininess);
+        SetUniform("uMaterial.diffuseColor", m.diffuseColor);
+        SetUniform("uMaterial.specularColor", m.specularColor);
+        SetUniform("uMaterial.shininess", m.shininess);
 
         // Push textures (if valid)
-        if (m.diffuse->id) SetUniform("material.diffuseMap", *m.diffuse, TextureSlot::DIFFUSE);
-        if (m.specular->id) SetUniform("material.specularMap", *m.specular, TextureSlot::SPECULAR);
-        if (m.normal->id) SetUniform("material.normalMap", *m.normal, TextureSlot::NORMAL);
+        if (m.renderType == Material::RenderType::TEXTURED) {
+            if (m.diffuse->id) SetUniform("uMaterial.diffuseMap", *m.diffuse, TextureSlot::DIFFUSE);
+            if (m.specular->id) SetUniform("uMaterial.specularMap", *m.specular, TextureSlot::SPECULAR);
+            if (m.normal->id) SetUniform("uMaterial.normalMap", *m.normal, TextureSlot::NORMAL);
+        }
     }
 
 }

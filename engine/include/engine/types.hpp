@@ -183,7 +183,52 @@ namespace Engine {
         };
 
         struct Light {
-            Color diffuse;
+            enum class Type : u8 {
+                DIRECTIONAL = 0,
+                POINT = 1,
+                SPOT = 2
+            };
+
+            Type type = Type::POINT;
+            vec3 color = vec3(1.0f);
+            float intensity = 1.0f;
+
+            // Point & Spot light properties
+            float range = 10.0f;  // max distance before full attenuation
+
+            // Spot light properties
+            float innerCutoffDegrees = 12.5f;  // inner cone
+            float outerCutoffDegrees = 17.5f;  // outer cone (for smooth falloff)
+
+            // Helper functions for common light types
+            static Light Directional(vec3 color = vec3(1.0f), float intensity = 1.0f) {
+                Light l;
+                l.type = Type::DIRECTIONAL;
+                l.color = color;
+                l.intensity = intensity;
+                return l;
+            }
+
+            static Light Point(float range = 10.0f, vec3 color = vec3(1.0f), float intensity = 1.0f) {
+                Light l;
+                l.type = Type::POINT;
+                l.range = range;
+                l.color = color;
+                l.intensity = intensity;
+                return l;
+            }
+
+            static Light Spot(float innerDegrees = 12.5f, float outerDegrees = 17.5f,
+                float range = 10.0f, vec3 color = vec3(1.0f), float intensity = 1.0f) {
+                Light l;
+                l.type = Type::SPOT;
+                l.innerCutoffDegrees = innerDegrees;
+                l.outerCutoffDegrees = outerDegrees;
+                l.range = range;
+                l.color = color;
+                l.intensity = intensity;
+                return l;
+            }
         };
 
         struct Name {

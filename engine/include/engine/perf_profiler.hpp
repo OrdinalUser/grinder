@@ -9,6 +9,9 @@
 #include <numeric>
 #include <mutex>
 
+#undef min
+#undef max
+
 class PerfProfiler {
 public:
     using clock = std::chrono::high_resolution_clock;

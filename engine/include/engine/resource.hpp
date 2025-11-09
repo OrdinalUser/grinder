@@ -79,10 +79,17 @@ namespace Engine {
         ENGINE_API Texture& operator=(Texture&& other) noexcept;
     };
 
-    struct Material {
+    struct Material : IResource {
+        enum class RenderType : u8 {
+            UNLIT, LIT, TEXTURED
+        };
+
         glm::vec3 diffuseColor{ 1.0f };
         glm::vec3 specularColor{ 1.0f };
         float shininess = 32.0f;
+        
+        RenderType renderType;
+        bool isTransparent;
 
         std::shared_ptr<Texture> diffuse;
         std::shared_ptr<Texture> specular;
@@ -312,4 +319,12 @@ namespace Engine {
 
         std::unordered_map<std::string, std::shared_ptr<IResource>> m_cache;
     };
+
+    namespace DefaultAssets {
+        ENGINE_API std::shared_ptr<Texture> GetDefaultColorTexture();
+        ENGINE_API std::shared_ptr<Texture> GetDefaultNormalTexture();
+        ENGINE_API std::shared_ptr<Shader> GetUnlitShader();
+        ENGINE_API std::shared_ptr<Shader> GetLitShader();
+        ENGINE_API std::shared_ptr<Shader> GetTexturedShader();
+    }
 }

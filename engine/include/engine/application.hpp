@@ -6,6 +6,7 @@
 #include <engine/vfs.hpp>
 #include <engine/resource.hpp>
 #include <engine/ecs.hpp>
+#include <engine/renderer.hpp>
 
 namespace Engine {
 	class Application {
@@ -29,12 +30,15 @@ namespace Engine {
 		ENGINE_API std::shared_ptr<ECS> GetECS() const;
 
 		ENGINE_API LayerStack& GetLayerStack();
+
+		ENGINE_API Renderer& GetRenderer() const;
 	private:
 		std::shared_ptr<Window> m_Window;
 		LayerStack m_LayerStack;
 		std::shared_ptr<VFS> m_Vfs;
 		std::shared_ptr<ResourceSystem> m_Rs;
 		std::shared_ptr<ECS> m_Ecs;
+		Renderer m_Renderer;
 		bool m_Running = true;
 	};
 }

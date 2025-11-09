@@ -38,7 +38,7 @@ namespace Engine {
 			auto now = clock::now();
 			float deltaTime = std::chrono::duration<float>(now - lastTime).count();
 			lastTime = now;
-			accumulator = std::min(accumulator + deltaTime, fixedDelta * 5.0f); // cap to prevent infinite fixed updates
+			accumulator = std::min(accumulator + deltaTime, fixedDelta * 5.0f); // cap to prevent infinite fixed updates while debugging
 
 			// Clear screen
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -46,7 +46,7 @@ namespace Engine {
 			PERF_BEGIN("Update_Fixed");
 			while (accumulator >= fixedDelta) {
 				for (ILayer* layer : m_LayerStack)
-					layer->OnUpdateFixed(fixedDelta); // your new scene_update_fixed() hook
+					layer->OnUpdateFixed(fixedDelta);
 				accumulator -= fixedDelta;
 			}
 			PERF_END("Update_Fixed");
@@ -61,12 +61,12 @@ namespace Engine {
 			m_Ecs->GetSystem<TransformSystem>()->PostUpdate();
 			PERF_END("Simulation");
 
-			PERF_BEGIN("Render");
+			PERF_BEGIN("Render_Total");
 			for (auto it = m_LayerStack.begin(); it != m_LayerStack.end(); ++it) {
 				ILayer* layer = *it;
 				layer->OnRender(updatedEntities);
 			}
-			PERF_END("Render");
+			PERF_END("Render_Total");
 
 			m_Window->OnUpdate();
 		}
@@ -98,5 +98,9 @@ namespace Engine {
 
 	LayerStack& Application::GetLayerStack() {
 		return m_LayerStack;
+	}
+
+	Renderer& Application::GetRenderer() const {
+		return const_cast<Renderer&>(m_Renderer);
 	}
 }
