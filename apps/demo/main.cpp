@@ -15,7 +15,8 @@
 using namespace Engine;
 using namespace Engine::Component;
 
-entity_id car = null, camera = null, big_H =null, small_H = null,grass  = null,road = null,pummp = null;
+entity_id car = null, camera = null, big_H = null, small_H = null, grass = null, road = null, pummp = null,
+truck = null, police = null, firetruck = null , city_parent= null, tree=null;
 Camera* camComp = nullptr;
 Ref<ECS> ecs;
 Ref<VFS> vfs;
@@ -154,7 +155,7 @@ public:
     Ref<Model> bigModel2 = nullptr;
     Ref<Model> bigModel3 = nullptr;
     Ref<Model> bigModel4 = nullptr;
-
+    Ref<Model> trees = nullptr;
     Ref<Model> smallModel = nullptr;
     Ref<Model> grassModel = nullptr;
     Ref<Model> roadModel = nullptr;
@@ -189,15 +190,15 @@ std::vector<std::vector<int>> cityMap = {
     {4, 8, 6, 6, 6, 8, 6, 6, 6, 8, 6, 6, 6, 8, 6, 6, 6, 6, 6, 6, 8, 6, 6, 8, 6, 6, 8, 4, 4, 4},
     {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 4, 0, 2, 2, 2, 2, 2, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
     {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 4, 4, 4, 4, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 8, 5, 5, 5, 5, 2, 0, 1, 1, 0, 2, 2, 0, 8, 4, 4},
-    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 8, 6, 8, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 0, 3, 0, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 8, 6, 8, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 5, 8, 8, 1, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 8, 5, 5, 5, 5, 4, 0, 1, 1, 0, 2, 2, 0, 8, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 0, 0, 0, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 0, 3, 0, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 0, 0, 0, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 5, 8, 8, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
     {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 8, 6, 6, 6, 6, 6, 8, 8, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 8, 8, 6, 6, 8, 6, 6, 8, 4, 4, 4},
-    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 4, 4, 4, 4, 4, 4, 1, 0, 1, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 4, 4, 4, 4, 8, 8, 6, 6, 8, 6, 6, 8, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 7, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
     {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
     {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
     {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
@@ -207,7 +208,7 @@ std::vector<std::vector<int>> cityMap = {
     {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 5, 5, 5, 5, 5, 5, 0, 4, 4, 4},
     {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
     {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 5, 5, 5, 5, 5, 5, 1, 0, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
-    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 4, 4, 4, 4, 4, 5, 1, 0, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 4, 4, 4, 4, 4, 5, 1, 7, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
     {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 5, 5, 5, 5, 5, 5, 1, 0, 5, 5, 5, 5, 5, 5, 0, 4, 4, 4},
     {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 8, 6, 6, 6, 6, 6, 6, 8, 4, 4, 4},
     {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 8, 6, 8, 6, 8, 6, 8, 6, 8, 1, 1, 1, 1, 1, 1, 0, 4, 4, 4},
@@ -244,7 +245,7 @@ std::vector<std::vector<int>> cityMap = {
                     // Instantiate big building model centered on this tile, occupying 3x3
                     Ref<Model> bigModel = randomChoice(bigModels);
 
-                    entity_id e = ecs->Instantiate(null, Component::Transform(), bigModel1);
+                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), bigModel1);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     static std::random_device rd;
@@ -258,24 +259,30 @@ std::vector<std::vector<int>> cityMap = {
                 }
                 else if (tile == 2 && bigModel4) {
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(null, Component::Transform(), bigModel4);
+                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), bigModel4);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({ (tileSize / 2.0f), 0.75f,  (tileSize / 2.0f) });
 
                    
                     continue;
-                }else if (tile ==4 && grassModel) {
+                }else if (tile ==4 && grassModel && trees) {
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(null, Component::Transform(), grassModel);
+                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), grassModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
+                    entity_id i = ecs->Instantiate(e, Component::Transform(), trees);
+                    auto ref1 = ecs->GetTransformRef(i);
+                   // ref1.SetPosition({ worldX, 0.0f, worldZ });
+                    ref1.SetScale({ tileSize/2 , 20.0f,  tileSize/2 });
+
+
                     continue;
                 }
                 else if (tile == 0 && roadModel){
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(null, Component::Transform(), roadModel);
+                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), roadModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({  (tileSize / 8.0f), 0.05f,  (tileSize / 8.0f) });
@@ -283,7 +290,7 @@ std::vector<std::vector<int>> cityMap = {
                 }
                 else if (tile == 6 && roadModel){
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(null, Component::Transform(), roadModel);
+                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), roadModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetRotation(glm::angleAxis(-1.5708f, glm::vec3(0.0f, 1.0f, 0.0f)));
@@ -292,7 +299,7 @@ std::vector<std::vector<int>> cityMap = {
                 }
                 else if (tile == 8 && cross){
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(null, Component::Transform(), cross);
+                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), cross);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({  (tileSize / 8.0f), 0.05f,  (tileSize / 8.0f) });
@@ -300,15 +307,15 @@ std::vector<std::vector<int>> cityMap = {
                 }
                 else if (tile == 3 && pummpModel) {
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(null, Component::Transform(), pummpModel);
+                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), pummpModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
-                    ref.SetScale({ (tileSize / 2.0f), 0.75f,  (tileSize / 2.0f) });
+                    ref.SetScale({ (tileSize*3 / 2.0f), 0.74f,  (tileSize*3 / 2.0f) });
                     continue;
                 }
                 else if (tile == 5 && bigModel3) {
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(null, Component::Transform(), bigModel3);
+                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), bigModel3);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({ (tileSize / 2.0f), 1.0f, (tileSize / 2.0f) });
@@ -316,12 +323,14 @@ std::vector<std::vector<int>> cityMap = {
                 }
                 else if (tile == 7 && roadModel) {
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(null, Component::Transform(), roadModel);
+                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), roadModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
-                    continue;
+                    
                     std::cout << worldX << "|" << worldZ << std::endl;
+                    continue;
+                    Log::info("{} {}", worldX, worldZ);
                 }
                 // Fallback: create cube for other tiles
                 auto obj = std::make_unique<Cube>();
@@ -406,11 +415,12 @@ enum cameraMode {
 static cameraMode camMode = TRACKING;
 static CarState carState = MOVE_LEFT;
 static float carYaw = 0.0f; // radians
-static float carSpeed = 7.0f; // world units per second
+static float carSpeed = 4.0f; // world units per second
 auto spinAngle = 0.0f;
 extern "C" {
     
     void scene_init(scene_data_t scene_data) {
+        
         // Scene preamble
         Application& app = Application::Get();
         ecs = app.GetECS();
@@ -419,7 +429,7 @@ extern "C" {
         auto module_name = string(scene_data.module_name);
 
         shader = rs->load<Shader>(vfs->Resolve(module_name, "assets/color"));
-
+        city_parent = ecs->CreateEntity3D(null, Component::Transform(), "CityParent");
         // Setup camera
         camera = ecs->CreateEntity3D(null, Component::Transform(), "Main Camera");
         auto& cam = ecs->AddComponent<Camera>(camera, Camera::Perspective());
@@ -434,65 +444,53 @@ extern "C" {
         carT.SetRotation(glm::angleAxis(1.5708f,glm::vec3({0,1,0})));
         carT.SetScale(glm::vec3(0.5, 0.5, 0.5));
 
-
-    // Load building models (if present) and assign to city
-    try{
-    Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H1.glb"), LoadCfg::Model{.static_mesh=true});
-    
-    city.bigModel1 = cityModel;
-    } catch (...) {
-        city.bigModel1 = nullptr;
-    }
-    try{
-    Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H2.glb"), LoadCfg::Model{.static_mesh=true});
-    
-    city.bigModel2 = cityModel;
-    } catch (...) {
-        city.bigModel2 = nullptr;
-    }
-        try{
-    Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H3.glb"), LoadCfg::Model{.static_mesh=true});
-    
-    city.bigModel3 = cityModel;
-    } catch (...) {
-        city.bigModel3 = nullptr;
-    }
-        try{
-    Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H4.glb"), LoadCfg::Model{.static_mesh=true});
-    
-    city.bigModel4 = cityModel;
-    } catch (...) {
-        city.bigModel4 = nullptr;
-    }
-    try {
+        Ref<Model> model1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/tank.glb"));
+        truck = ecs->Instantiate(null, Component::Transform(), model1);
+        auto truckT = ecs->GetTransformRef(truck);
+        truckT.SetPosition({ 5.0f, 0.0f, -19.0f });
+        truckT.SetScale({ 0.25f,0.25f,0.25f });
         
+        Ref<Model> modelpolice = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Police Car.glb"));
+        police = ecs->Instantiate(null, Component::Transform(), modelpolice);
+        auto policeT = ecs->GetTransformRef(police);
+        policeT.SetPosition({ 8.0f, 0.0f, 9.0f });
+        policeT.SetScale({ 0.25f,0.25f,0.25f });
+        //policeT.SetRotation(glm::angleAxis(1.5708f, glm::vec3({ 0,1,0 })));
+    // Load building models (if present) and assign to city
+   
+    Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H1.glb"), LoadCfg::Model{.static_mesh=true});
+    city.bigModel1 = cityModel;
+    
+    Ref<Model> cityModel1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H2.glb"), LoadCfg::Model{.static_mesh=true});
+    
+    city.bigModel2 = cityModel1;
+
+    Ref<Model> cityModel2 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H3.glb"), LoadCfg::Model{.static_mesh=true});
+    
+    city.bigModel3 = cityModel2;
+
+    Ref<Model> cityModel3 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H4.glb"), LoadCfg::Model{.static_mesh=true});
+    
+    city.bigModel4 = cityModel3;
+
         Ref<Model> grass = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/grass.glb"));
     city.grassModel = grass;
-    } catch (...) {
-        city.smallModel = nullptr;
-    }
-    try {
+
         Ref<Model> road = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/road.glb"));
         city.roadModel = road;
-    } catch (...) {
-        city.roadModel = nullptr;
-    }
-    try {
-        Ref<Model> road = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/cross.glb"));
-        city.cross = road;
-    } catch (...) {
-        city.cross = nullptr;
-    }try{
+
+        Ref<Model> road1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/cross.glb"));
+        city.cross = road1;
+
         Ref<Model> small_H = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/small_b.glb"), LoadCfg::Model{.static_mesh=true});
     city.smallModel = small_H;
-    } catch (...) {
-        city.smallModel = nullptr;
-    }try{
+
         Ref<Model> pummp = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/gas_pump.glb"), LoadCfg::Model{.static_mesh=true});
         city.pummpModel = pummp;
-    }catch (...) {
-        city.pummpModel = nullptr;
-         }
+        Ref<Model> tree = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/tree.glb"), LoadCfg::Model{ .static_mesh = true });
+        city.trees = tree;
+        // Create parent entity for all city objects
+       
     city.shader = shader;
     city.initializeModels();
     city.generate();
@@ -504,7 +502,8 @@ extern "C" {
         auto carTransform = ecs->GetTransformRef(car);
         glm::vec3 carPos = carTransform.GetPosition();
         glm::quat carRot = carTransform.GetRotation();
-
+        auto policeT = ecs->GetTransformRef(police);
+        glm::vec3 polpos = policeT.GetPosition();
         // Extract car's Y-axis rotation (yaw)
         glm::vec3 carEuler = glm::eulerAngles(carRot);
         float carYaw = carEuler.y;
@@ -514,8 +513,8 @@ extern "C" {
                 smoothCarRotation = glm::mix(smoothCarRotation, carYaw, 0.1f);
 
                 // Camera follows behind the car
-                float distance = 8.0f;  // distance behind car
-                float height = 8.0f;     // height above car
+                float distance = 0.01f;  // distance behind car
+                float height = 0.32f;     // height above car
 
             // Calculate camera offset in car's local space
             glm::vec3 localOffset = glm::vec3(
@@ -536,7 +535,7 @@ extern "C" {
            // cameraTransform.RotateAround(carPos, 1.0f);
 
             // Make camera look at car
-           camComp->LookAt(smoothCamPos, carPos);
+           camComp->LookAt(smoothCamPos, carTransform.Forward()+carPos);
                 break;
             }
             case TRACKING: {
@@ -582,7 +581,7 @@ extern "C" {
         // Car movement state machine
         {
             glm::vec3 pos = carTransform.GetPosition();
-
+            glm::vec3 polpos = policeT.GetPosition();
             switch (carState) {
             case MOVE_LEFT:
                 pos.x -= carSpeed * deltaTime;
@@ -620,14 +619,15 @@ extern "C" {
                 if (pos.x >= 2.0f) {
                     carState = STOPPED;
                     pos.x = 2.0f;
-                    camMode = SPIN;
+                    //camMode = SPIN;
                 }
                 break;
             case STOPPED:
+                polpos.z-= 10.0f * deltaTime;
                 carYaw = -1.5708f;
                 break;
             }
-
+            policeT.SetPosition(polpos);
             carTransform.SetPosition(pos);
             carTransform.SetRotation(glm::angleAxis(carYaw, glm::vec3(0.0f, 1.0f, 0.0f)));
         }
