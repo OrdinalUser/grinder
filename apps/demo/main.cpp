@@ -15,8 +15,7 @@
 using namespace Engine;
 using namespace Engine::Component;
 
-entity_id car = null, camera = null, big_H = null, small_H = null, grass = null, road = null, pummp = null,
-truck = null, police = null, firetruck = null, city_parent = null, tree = null;
+entity_id car = null, camera = null, big_H =null, small_H = null,grass  = null,road = null,pummp = null;
 Camera* camComp = nullptr;
 Ref<ECS> ecs;
 Ref<VFS> vfs;
@@ -130,12 +129,12 @@ public:
         glm::mat4 R = glm::rotate(glm::mat4(1.0f), rotation.z, glm::vec3{ 0,1,0 });
         glm::mat4 S = glm::scale(glm::mat4(1.0f), scale);
 
-        modelMatrix = parent_matrix * T * R * S;
+         modelMatrix = parent_matrix * T * R * S;
 
     }
 
     // Draw polygons
-    void render(glm::mat4& viewMatrix) {
+    void render( glm::mat4& viewMatrix ) {
         // Update GPU uniforms
         shader->Enable();
         shader->SetUniform("ModelMatrix", modelMatrix);
@@ -149,13 +148,13 @@ public:
 class City {
 public:
     std::vector<std::unique_ptr<Cube>> objects;
-    Ref<Shader> shader = nullptr;
+    Ref<Shader> shader = nullptr; 
     // Optional 3D model buildings (loaded from assets)
     Ref<Model> bigModel1 = nullptr;
     Ref<Model> bigModel2 = nullptr;
     Ref<Model> bigModel3 = nullptr;
     Ref<Model> bigModel4 = nullptr;
-    Ref<Model> trees = nullptr;
+
     Ref<Model> smallModel = nullptr;
     Ref<Model> grassModel = nullptr;
     Ref<Model> roadModel = nullptr;
@@ -163,69 +162,69 @@ public:
     Ref<Model> pummpModel = nullptr;
     std::vector<Ref<Model>> bigModels;
 
-    // Manually adding items to the array
-    void initializeModels() {
-        bigModels.push_back(bigModel1);
-        bigModels.push_back(bigModel2);
-        bigModels.push_back(bigModel3);
-        bigModels.push_back(bigModel4);
-
+// Manually adding items to the array
+void initializeModels() {
+    bigModels.push_back(bigModel1);
+    bigModels.push_back(bigModel2);
+    bigModels.push_back(bigModel3);
+    bigModels.push_back(bigModel4);
+    
+}
+Ref<Model> randomChoice(const std::vector<Ref<Model>>& models) {
+    if (models.empty()) {
+        return nullptr;
     }
-    Ref<Model> randomChoice(const std::vector<Ref<Model>>& models) {
-        if (models.empty()) {
-            return nullptr;
-        }
-        static std::random_device rd;
-        static std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, models.size() - 1);
-        int randomIndex = dis(gen);
-        return models[randomIndex];
-    }
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, models.size() - 1);
+    int randomIndex = dis(gen);
+    return models[randomIndex];
+}
     City() {}
 
     void generate() {
         // R = 0 (Road), S = 2 (Small Building), B = 1 (Big Building), G = 4 (Grass), P = 3 (Gas Pump), T = 5 (Trees)
-        std::vector<std::vector<int>> cityMap = {
-            {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4},
-            {4, 8, 6, 6, 6, 8, 6, 6, 6, 8, 6, 6, 6, 8, 6, 6, 6, 6, 6, 6, 8, 6, 6, 8, 6, 6, 8, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 4, 0, 2, 2, 2, 2, 2, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 4, 4, 4, 4, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 8, 5, 5, 5, 5, 4, 0, 1, 1, 0, 2, 2, 0, 8, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 0, 0, 0, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 0, 3, 0, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 0, 0, 0, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 5, 8, 8, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 8, 6, 6, 6, 6, 6, 8, 8, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 4, 4, 4, 4, 8, 8, 6, 6, 8, 6, 6, 8, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 7, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 1, 4, 1, 0, 2, 2, 0, 8, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 1, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 6, 6, 6, 8, 6, 6, 8, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 5, 5, 5, 5, 5, 5, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 5, 5, 5, 5, 5, 5, 1, 0, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 4, 4, 4, 4, 4, 5, 1, 7, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 5, 5, 5, 5, 5, 5, 1, 0, 5, 5, 5, 5, 5, 5, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 8, 6, 6, 6, 6, 6, 6, 8, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 8, 6, 8, 6, 8, 6, 8, 6, 8, 1, 1, 1, 1, 1, 1, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 1, 4, 4, 4, 4, 1, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 4, 1, 4, 1, 4, 1, 4, 1, 4, 0, 1, 4, 4, 4, 4, 1, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 1, 1, 1, 1, 1, 0, 8, 4, 4},
-            {8, 8, 6, 6, 6, 8, 6, 8, 6, 8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 6, 6, 6, 6, 6, 6, 8, 4, 4, 4},
-            {0, 4, 4, 4, 4, 0, 4, 0, 4, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 1, 1, 1, 1, 1, 1, 0, 4, 4, 4},
-            {0, 4, 4, 4, 4, 8, 6, 1, 6, 8, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 4, 4, 4, 4, 1, 0, 4, 4, 4},
-            {0, 4, 4, 4, 4, 0, 4, 0, 1, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 0, 1, 1, 1, 1, 1, 1, 0, 4, 4, 4},
-            {8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 4, 4, 4},
-            {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}
-        };
+std::vector<std::vector<int>> cityMap = {
+    {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4},
+    {4, 8, 6, 6, 6, 8, 6, 6, 6, 8, 6, 6, 6, 8, 6, 6, 6, 6, 6, 6, 8, 6, 6, 8, 6, 6, 8, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 4, 0, 2, 2, 2, 2, 2, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 4, 4, 4, 4, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 8, 5, 5, 5, 5, 2, 0, 1, 1, 0, 2, 2, 0, 8, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 8, 6, 8, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 0, 3, 0, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 8, 6, 8, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 5, 8, 8, 1, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 8, 6, 6, 6, 6, 6, 8, 8, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 8, 8, 6, 6, 8, 6, 6, 8, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 4, 4, 4, 4, 4, 4, 1, 0, 1, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 1, 4, 1, 0, 2, 2, 0, 8, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 1, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 6, 6, 6, 8, 6, 6, 8, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 5, 5, 5, 5, 5, 5, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 5, 5, 5, 5, 5, 5, 1, 0, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 4, 4, 4, 4, 4, 5, 1, 0, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 5, 5, 5, 5, 5, 5, 1, 0, 5, 5, 5, 5, 5, 5, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 8, 6, 6, 6, 6, 6, 6, 8, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 8, 6, 8, 6, 8, 6, 8, 6, 8, 1, 1, 1, 1, 1, 1, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 1, 4, 4, 4, 4, 1, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 4, 1, 4, 1, 4, 1, 4, 1, 4, 0, 1, 4, 4, 4, 4, 1, 0, 4, 4, 4},
+    {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 1, 1, 1, 1, 1, 0, 8, 4, 4},
+    {8, 8, 6, 6, 6, 8, 6, 8, 6, 8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 6, 6, 6, 6, 6, 6, 8, 4, 4, 4},
+    {0, 4, 4, 4, 4, 0, 4, 0, 4, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 1, 1, 1, 1, 1, 1, 0, 4, 4, 4},
+    {0, 4, 4, 4, 4, 8, 6, 1, 6, 8, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 4, 4, 4, 4, 1, 0, 4, 4, 4},
+    {0, 4, 4, 4, 4, 0, 4, 0, 1, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 0, 1, 1, 1, 1, 1, 1, 0, 4, 4, 4},
+    {8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 4, 4, 4},
+    {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}
+};
 
         float tileSize = 2.0f;
         int count = 0;
-
+        
         int rows = cityMap.size();
         int cols = cityMap[0].size();
 
@@ -241,82 +240,75 @@ public:
                 if (tile == -1) continue;
 
                 // If we have 3x3 building models loaded, place them and mark surrounding tiles as occupied (-1)
-                if (tile == 1 && bigModel1) {
+                if (tile == 1 && bigModel1 ) {
                     // Instantiate big building model centered on this tile, occupying 3x3
                     Ref<Model> bigModel = randomChoice(bigModels);
 
-                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), bigModel1);
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), bigModel1);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     static std::random_device rd;
                     static std::mt19937 gen(rd());
-                    std::uniform_int_distribution<> dis(2, 3);
+                    std::uniform_int_distribution<> dis(2,3);
                     // Optionally scale the model to roughly cover 3x3 tiles
-                    ref.SetScale({ tileSize / 1.1,dis(gen),tileSize / 1.1 });
-
-
+                    ref.SetScale({ tileSize/1.1,dis(gen),tileSize / 1.1});
+                    
+                    
                     continue;
                 }
                 else if (tile == 2 && bigModel4) {
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), bigModel4);
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), bigModel4);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({ (tileSize / 2.0f), 0.75f,  (tileSize / 2.0f) });
 
-
+                   
                     continue;
-                }
-                else if (tile == 4 && grassModel && trees) {
+                }else if (tile ==4 && grassModel) {
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), grassModel);
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), grassModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
-                    entity_id i = ecs->Instantiate(e, Component::Transform(), trees);
-                    auto ref1 = ecs->GetTransformRef(i);
-                    // ref1.SetPosition({ worldX, 0.0f, worldZ });
-                    ref1.SetScale({ tileSize / 2 , 20.0f,  tileSize / 2 });
-
-
                     continue;
                 }
-                else if (tile == 0 && roadModel) {
+                else if (tile == 0 && roadModel){
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), roadModel);
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), roadModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
-                    ref.SetScale({ (tileSize / 8.0f), 0.05f,  (tileSize / 8.0f) });
+                    ref.SetScale({  (tileSize / 8.0f), 0.05f,  (tileSize / 8.0f) });
                     continue;
                 }
-                else if (tile == 6 && roadModel) {
+                else if (tile == 6 && roadModel){
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), roadModel);
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), roadModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetRotation(glm::angleAxis(-1.5708f, glm::vec3(0.0f, 1.0f, 0.0f)));
-                    ref.SetScale({ (tileSize / 8.0f), 0.05f,  (tileSize / 8.0f) });
+                    ref.SetScale({  (tileSize / 8.0f), 0.05f,  (tileSize / 8.0f) });
                     continue;
                 }
-                else if (tile == 8 && cross) {
+                else if (tile == 8 && cross){
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), cross);
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), cross);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
-                    ref.SetScale({ (tileSize / 8.0f), 0.05f,  (tileSize / 8.0f) });
+                    ref.SetScale({  (tileSize / 8.0f), 0.05f,  (tileSize / 8.0f) });
                     continue;
                 }
                 else if (tile == 3 && pummpModel) {
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), pummpModel);
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), pummpModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
-                    ref.SetScale({ (tileSize * 3 / 2.0f), 0.74f,  (tileSize * 3 / 2.0f) });
+                    ref.SetScale({ (tileSize / 2.0f), 0.75f,  (tileSize / 2.0f) });
                     continue;
                 }
                 else if (tile == 5 && bigModel3) {
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), bigModel3);
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), bigModel3);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({ (tileSize / 2.0f), 1.0f, (tileSize / 2.0f) });
@@ -324,14 +316,12 @@ public:
                 }
                 else if (tile == 7 && roadModel) {
                     // Instantiate small building model centered on this tile, occupying 3x3
-                    entity_id e = ecs->Instantiate(city_parent, Component::Transform(), roadModel);
+                    entity_id e = ecs->Instantiate(null, Component::Transform(), roadModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
-
-                    std::cout << worldX << "|" << worldZ << std::endl;
                     continue;
-                    Log::info("{} {}", worldX, worldZ);
+                    std::cout << worldX << "|" << worldZ << std::endl;
                 }
                 // Fallback: create cube for other tiles
                 auto obj = std::make_unique<Cube>();
@@ -379,7 +369,7 @@ public:
                     std::cout << worldX << "|" << worldZ << std::endl;
                 }
                 else continue;
-
+                
                 obj->updateModelMatrix();
                 objects.push_back(std::move(obj));
                 count++;
@@ -387,7 +377,7 @@ public:
         }
     }
 
-    void render(glm::mat4& viewMatrix) {
+    void render( glm::mat4& viewMatrix) {
         for (auto& o : objects)
             o->render(viewMatrix);
     }
@@ -416,12 +406,11 @@ enum cameraMode {
 static cameraMode camMode = TRACKING;
 static CarState carState = MOVE_LEFT;
 static float carYaw = 0.0f; // radians
-static float carSpeed = 4.0f; // world units per second
+static float carSpeed = 7.0f; // world units per second
 auto spinAngle = 0.0f;
 extern "C" {
-
+    
     void scene_init(scene_data_t scene_data) {
-
         // Scene preamble
         Application& app = Application::Get();
         ecs = app.GetECS();
@@ -430,92 +419,103 @@ extern "C" {
         auto module_name = string(scene_data.module_name);
 
         shader = rs->load<Shader>(vfs->Resolve(module_name, "assets/color"));
-        city_parent = ecs->CreateEntity3D(null, Component::Transform(), "CityParent");
+
         // Setup camera
         camera = ecs->CreateEntity3D(null, Component::Transform(), "Main Camera");
         auto& cam = ecs->AddComponent<Camera>(camera, Camera::Perspective());
         cam.isMain = true;
         camComp = &cam;
-
+        
         // Load and instantiate our 3D model
         Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/car_expo.glb"));
         car = ecs->Instantiate(null, Component::Transform(), model);
         auto carT = ecs->GetTransformRef(car);
         carT.SetPosition({ 20,0.0f,22.5 });
-        carT.SetRotation(glm::angleAxis(1.5708f, glm::vec3({ 0,1,0 })));
+        carT.SetRotation(glm::angleAxis(1.5708f,glm::vec3({0,1,0})));
         carT.SetScale(glm::vec3(0.5, 0.5, 0.5));
 
-        Ref<Model> model1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/tank.glb"));
-        truck = ecs->Instantiate(null, Component::Transform(), model1);
-        auto truckT = ecs->GetTransformRef(truck);
-        truckT.SetPosition({ 5.0f, 0.0f, -19.0f });
-        truckT.SetScale({ 0.25f,0.25f,0.25f });
 
-        Ref<Model> modelpolice = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Police Car.glb"));
-        police = ecs->Instantiate(null, Component::Transform(), modelpolice);
-        auto policeT = ecs->GetTransformRef(police);
-        policeT.SetPosition({ 8.0f, 0.0f, 9.0f });
-        policeT.SetScale({ 0.25f,0.25f,0.25f });
-        //policeT.SetRotation(glm::angleAxis(1.5708f, glm::vec3({ 0,1,0 })));
     // Load building models (if present) and assign to city
-
-        Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H1.glb"), LoadCfg::Model{ .static_mesh = true });
-        city.bigModel1 = cityModel;
-
-        Ref<Model> cityModel1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H2.glb"), LoadCfg::Model{ .static_mesh = true });
-
-        city.bigModel2 = cityModel1;
-
-        Ref<Model> cityModel2 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H3.glb"), LoadCfg::Model{ .static_mesh = true });
-
-        city.bigModel3 = cityModel2;
-
-        Ref<Model> cityModel3 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H4.glb"), LoadCfg::Model{ .static_mesh = true });
-
-        city.bigModel4 = cityModel3;
-
+    try{
+    Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H1.glb"), LoadCfg::Model{.static_mesh=true});
+    
+    city.bigModel1 = cityModel;
+    } catch (...) {
+        city.bigModel1 = nullptr;
+    }
+    try{
+    Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H2.glb"), LoadCfg::Model{.static_mesh=true});
+    
+    city.bigModel2 = cityModel;
+    } catch (...) {
+        city.bigModel2 = nullptr;
+    }
+        try{
+    Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H3.glb"), LoadCfg::Model{.static_mesh=true});
+    
+    city.bigModel3 = cityModel;
+    } catch (...) {
+        city.bigModel3 = nullptr;
+    }
+        try{
+    Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H4.glb"), LoadCfg::Model{.static_mesh=true});
+    
+    city.bigModel4 = cityModel;
+    } catch (...) {
+        city.bigModel4 = nullptr;
+    }
+    try {
+        
         Ref<Model> grass = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/grass.glb"));
-        city.grassModel = grass;
-
+    city.grassModel = grass;
+    } catch (...) {
+        city.smallModel = nullptr;
+    }
+    try {
         Ref<Model> road = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/road.glb"));
         city.roadModel = road;
-
-        Ref<Model> road1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/cross.glb"));
-        city.cross = road1;
-
-        Ref<Model> small_H = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/small_b.glb"), LoadCfg::Model{ .static_mesh = true });
-        city.smallModel = small_H;
-
-        Ref<Model> pummp = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/gas_pump.glb"), LoadCfg::Model{ .static_mesh = true });
-        city.pummpModel = pummp;
-        Ref<Model> tree = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/tree.glb"), LoadCfg::Model{ .static_mesh = true });
-        city.trees = tree;
-        // Create parent entity for all city objects
-
-        city.shader = shader;
-        city.initializeModels();
-        city.generate();
+    } catch (...) {
+        city.roadModel = nullptr;
     }
-
+    try {
+        Ref<Model> road = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/cross.glb"));
+        city.cross = road;
+    } catch (...) {
+        city.cross = nullptr;
+    }try{
+        Ref<Model> small_H = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/small_b.glb"), LoadCfg::Model{.static_mesh=true});
+    city.smallModel = small_H;
+    } catch (...) {
+        city.smallModel = nullptr;
+    }try{
+        Ref<Model> pummp = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/gas_pump.glb"), LoadCfg::Model{.static_mesh=true});
+        city.pummpModel = pummp;
+    }catch (...) {
+        city.pummpModel = nullptr;
+         }
+    city.shader = shader;
+    city.initializeModels();
+    city.generate();
+}
+    
 
     void scene_update(float deltaTime) {
         // Get car transform
         auto carTransform = ecs->GetTransformRef(car);
         glm::vec3 carPos = carTransform.GetPosition();
         glm::quat carRot = carTransform.GetRotation();
-        auto policeT = ecs->GetTransformRef(police);
-        glm::vec3 polpos = policeT.GetPosition();
+
         // Extract car's Y-axis rotation (yaw)
         glm::vec3 carEuler = glm::eulerAngles(carRot);
         float carYaw = carEuler.y;
         switch (camMode) {
-        case CAMERA_FOLLOW: {
-            // Smooth rotation interpolation
-            smoothCarRotation = glm::mix(smoothCarRotation, carYaw, 0.1f);
+            case CAMERA_FOLLOW: {
+                // Smooth rotation interpolation
+                smoothCarRotation = glm::mix(smoothCarRotation, carYaw, 0.1f);
 
-            // Camera follows behind the car
-            float distance = 0.01f;  // distance behind car
-            float height = 0.32f;     // height above car
+                // Camera follows behind the car
+                float distance = 8.0f;  // distance behind car
+                float height = 8.0f;     // height above car
 
             // Calculate camera offset in car's local space
             glm::vec3 localOffset = glm::vec3(
@@ -536,53 +536,53 @@ extern "C" {
            // cameraTransform.RotateAround(carPos, 1.0f);
 
             // Make camera look at car
-            camComp->LookAt(smoothCamPos, carTransform.Forward() + carPos);
-            break;
-        }
-        case TRACKING: {
-            // Fixed tracking position
-            glm::vec3 trackingPos = glm::vec3(-13.0f, 10.0f, 22.0f);
-            auto cameraTransform = ecs->GetTransformRef(camera);
-            cameraTransform.SetPosition(trackingPos);
+           camComp->LookAt(smoothCamPos, carPos);
+                break;
+            }
+            case TRACKING: {
+                // Fixed tracking position
+                glm::vec3 trackingPos = glm::vec3(-13.0f, 10.0f, 22.0f);
+                auto cameraTransform = ecs->GetTransformRef(camera);
+                cameraTransform.SetPosition(trackingPos);
 
-            // Make camera look at car
-            camComp->LookAt(trackingPos, carPos);
-            break;
-        }
-        case SPIN: {
+                // Make camera look at car
+                camComp->LookAt(trackingPos, carPos);
+                break;
+            }
+            case SPIN: {
+                
+                // Update spin angle for continuous rotation
+                spinAngle += deltaTime * 0.5f; // Adjust speed by changing multiplier
 
-            // Update spin angle for continuous rotation
-            spinAngle += deltaTime * 0.5f; // Adjust speed by changing multiplier
+                float radius = 12.0f;  // Distance from car
+                float height = 8.0f;   // Height above car
 
-            float radius = 12.0f;  // Distance from car
-            float height = 8.0f;   // Height above car
+                // Calculate camera position in circular orbit
+                glm::vec3 offset = glm::vec3(
+                    cos(spinAngle) * radius,
+                    height,
+                    sin(spinAngle) * radius
+                );
 
-            // Calculate camera position in circular orbit
-            glm::vec3 offset = glm::vec3(
-                cos(spinAngle) * radius,
-                height,
-                sin(spinAngle) * radius
-            );
+                glm::vec3 spinCamPos = carPos + offset;
 
-            glm::vec3 spinCamPos = carPos + offset;
+                // Update camera transform
+                auto cameraTransform = ecs->GetTransformRef(camera);
+                cameraTransform.SetPosition(spinCamPos);
 
-            // Update camera transform
-            auto cameraTransform = ecs->GetTransformRef(camera);
-            cameraTransform.SetPosition(spinCamPos);
-
-            // Keep camera looking at car
-            camComp->LookAt(spinCamPos, glm::vec3{ 8,0,-18 });
-            break;
-        }
+                // Keep camera looking at car
+                camComp->LookAt(spinCamPos, glm::vec3{8,0,-18});
+                break;
+            }
         }
         // Rotate car wheels
         constexpr float WHEEL_ROTATION_SPEED = 5.0f;
-
+ 
 
         // Car movement state machine
         {
             glm::vec3 pos = carTransform.GetPosition();
-            glm::vec3 polpos = policeT.GetPosition();
+
             switch (carState) {
             case MOVE_LEFT:
                 pos.x -= carSpeed * deltaTime;
@@ -620,15 +620,14 @@ extern "C" {
                 if (pos.x >= 2.0f) {
                     carState = STOPPED;
                     pos.x = 2.0f;
-                    //camMode = SPIN;
+                    camMode = SPIN;
                 }
                 break;
             case STOPPED:
-                polpos.z -= 10.0f * deltaTime;
                 carYaw = -1.5708f;
                 break;
             }
-            policeT.SetPosition(polpos);
+
             carTransform.SetPosition(pos);
             carTransform.SetRotation(glm::angleAxis(carYaw, glm::vec3(0.0f, 1.0f, 0.0f)));
         }
@@ -636,10 +635,10 @@ extern "C" {
 
     void scene_render() {
         city.shader->Enable();
-
+        
         // Get the camera's view matrix from the ECS camera component
         glm::mat4 viewMatrix = camComp->viewMatrix;
-
+        
         // Render city with the camera's view matrix
         city.render(viewMatrix);
     }
