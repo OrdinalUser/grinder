@@ -7,6 +7,14 @@ namespace Engine {
 
     // ========== Public API ==========
 
+    ENGINE_API Renderer::Renderer() {
+        glGenBuffers(1, &m_ssbo); // Prepare our reusable ssbo for instancing
+    }
+
+    ENGINE_API Renderer::~Renderer() {
+        glDeleteBuffers(1, &m_ssbo);
+    }
+
     void Renderer::SetCamera(Transform* transform, Camera* camera) {
         m_cameraTransform = transform;
         m_camera = camera;
@@ -174,10 +182,14 @@ namespace Engine {
         Shader* shader = material->shader.get();
 
         // Set material properties
-        shader->SetUniform("uMaterial.diffuseColor", material->diffuseColor);
-        shader->SetUniform("uMaterial.specularColor", material->specularColor);
-        shader->SetUniform("uMaterial.shininess", material->shininess);
-
+        if (material->renderType == Material::RenderType::LIT) {
+            shader->SetUniform("uMaterial.diffuseColor", material->diffuseColor);
+            shader->SetUniform("uMaterial.specularColor", material->specularColor);
+            shader->SetUniform("uMaterial.shininess", material->shininess);
+            if (material->isTransparent)
+                shader->SetUniform("uMaterial.opacity", material->opacity);
+        }
+        
         // Set textures (only for textured materials)
         if (material->renderType == Material::RenderType::TEXTURED) {
             if (material->diffuse && material->diffuse->id) {
@@ -189,10 +201,8 @@ namespace Engine {
             if (material->normal && material->normal->id) {
                 shader->SetUniform("uMaterial.normalMap", *material->normal, Shader::TextureSlot::NORMAL);
             }
+            shader->SetUniform("uMaterial.shininess", material->shininess);
         }
-
-        if (material->isTransparent)
-            shader->SetUniform("uMaterial.opacity", material->opacity);
     }
 
     // ========== Drawing ==========
@@ -217,18 +227,23 @@ namespace Engine {
             if (batch.modelMatrices.size() == 1) {
                 // Single object - standard draw
                 shader->SetUniform("uModel", batch.modelMatrices[0]);
+                shader->SetUniform("uUseInstancing", false);
                 key.mesh->Draw();
                 m_stats.drawCalls++;
             }
             else {
-                // Multiple objects - instanced draw (TODO: implement instancing)
-                // For now, draw individually
-                for (const mat4& modelMatrix : batch.modelMatrices) {
-                    shader->SetUniform("uModel", modelMatrix);
-                    key.mesh->Draw();
-                    m_stats.drawCalls++;
-                }
-                // m_stats.instancedDrawCalls++; // When instancing is implemented
+                /// Multiple objects - prepare an SSBO and do an instanced draw
+                // Fill SSBO with data
+                glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssbo);
+                glBufferData(GL_SHADER_STORAGE_BUFFER, batch.modelMatrices.size() * sizeof(mat4), batch.modelMatrices.data(), GL_DYNAMIC_DRAW);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_ssbo);
+
+                // Draw our stuff
+                shader->SetUniform("uUseInstancing", true);
+                key.mesh->Bind(); // set base mesh
+                glDrawElementsInstanced(GL_TRIANGLES, key.mesh->indicesCount, GL_UNSIGNED_INT, 0, batch.modelMatrices.size());
+
+                m_stats.instancedDrawCalls++;
             }
         }
     }
@@ -253,6 +268,7 @@ namespace Engine {
             SetCommonUniforms(shader);
             SetMaterialUniforms(cmd.material);
             shader->SetUniform("uModel", cmd.transform->modelMatrix);
+            shader->SetUniform("uUseInstancing", false);
 
             shader->SetUniform("uLightPos", m_cameraPosition);
             shader->SetUniform("uLightColor", vec3(1, 1, 1));

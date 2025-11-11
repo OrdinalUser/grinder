@@ -20,6 +20,9 @@ namespace Engine {
         ENGINE_API void Draw();
         ENGINE_API void Clear();
 
+        ENGINE_API Renderer();
+        ENGINE_API ~Renderer();
+
         // Debug stats
         struct Stats {
             size_t drawCalls = 0;
@@ -111,6 +114,9 @@ namespace Engine {
         bool m_useFramebuffer = false;
         int m_framebufferWidth = 0;
         int m_framebufferHeight = 0;
+        
+        // Batching & instancing
+        GLuint m_ssbo = 0;
 
         // Stats
         Stats m_stats;

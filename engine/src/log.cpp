@@ -8,6 +8,8 @@
 
 #include <csignal>
 #include <sstream>
+#include <filesystem>
+#include <optional>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -232,6 +234,7 @@ static std::string generate_log_filename(const std::string& base_name) {
 namespace Engine::Log {
     static std::shared_ptr<spdlog::logger> g_logger;
     static std::once_flag g_init_flag;
+    static std::optional<std::filesystem::path> log_filepath;
 
     ENGINE_API std::shared_ptr<spdlog::logger> GetLogger() {
         return g_logger;
@@ -241,15 +244,21 @@ namespace Engine::Log {
 #ifdef _DEBUG
         // Log to both file and console
         constexpr const char* debug_base_name = "debug";
-        auto debug_filename = generate_log_filename(debug_base_name);
+        const std::filesystem::path log_folder{ "logs" };
+        auto log_filename = generate_log_filename(debug_base_name);
 
-        auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(debug_filename);
+        log_filepath = log_folder / log_filename;
+        std::string log_filepath_str = log_filepath.value().string(); // because our <smart> path yields wide chars or utf/s
+        const char* filepath_cstr = reinterpret_cast<const char*>(log_filepath_str.c_str()); // this terribleness is to get ascii path :(
+        std::filesystem::create_directories(log_filepath.value().parent_path());
+
+        auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(filepath_cstr);
         auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
         g_logger = std::make_shared<spdlog::logger>("engine", spdlog::sinks_init_list{ console_sink, file_sink });
         g_logger->set_pattern("[%H:%M:%S] [thread %t] %v");
         console_sink->set_level(spdlog::level::trace);
         file_sink->set_level(spdlog::level::err);
-        g_logger->info("Debug logging initialized, outputting to console and {}", debug_filename);
+        g_logger->info("Debug logging initialized, outputting to console and \"{}\"", filepath_cstr);
         g_logger->flush_on(spdlog::level::err);
 #else
         // Log only errors and to debug console, maybe change to also dump to file, we'll see
@@ -278,7 +287,12 @@ namespace Engine::Log {
 
     ENGINE_API void destroy_logging() {
         g_logger->flush();
+        g_logger.reset(); // Had to be done, otherwise our log delete would attempt to access a locked file and crash
         spdlog::shutdown();
+        // Attempt to delete empty log file if exists
+        if (log_filepath.has_value() && std::filesystem::file_size(log_filepath.value()) == 0) {
+            std::filesystem::remove(log_filepath.value());
+        }
     }
 
 }

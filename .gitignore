@@ -5,3 +5,4 @@ build/
 # Dev - Other
 imgui.ini
 apps/*/assets/
+logs
