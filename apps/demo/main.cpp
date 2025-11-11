@@ -16,7 +16,7 @@ using namespace Engine;
 using namespace Engine::Component;
 
 entity_id car = null, camera = null, big_H = null, small_H = null, grass = null, road = null, pummp = null,
-truck = null, police = null, firetruck = null, city_parent = null, tree = null;
+truck = null, police = null, firetruck = null, city_parent = null, tree = null, car2= null;
 Camera* camComp = nullptr;
 Ref<ECS> ecs;
 Ref<VFS> vfs;
@@ -196,9 +196,9 @@ public:
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 0, 0, 0, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 5, 8, 8, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 8, 6, 6, 6, 6, 6, 8, 8, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 4, 4, 4, 4, 8, 8, 6, 6, 8, 6, 6, 8, 4, 4, 4},
+            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 4, 4, 4, 4, 0, 8, 6, 6, 8, 6, 6, 8, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 7, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
+            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
@@ -208,7 +208,7 @@ public:
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 5, 5, 5, 5, 5, 5, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 5, 5, 5, 5, 5, 5, 1, 0, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 4, 4, 4, 4, 4, 5, 1, 7, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
+            {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 4, 4, 4, 4, 4, 5, 1, 0, 5, 4, 4, 4, 4, 5, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 5, 5, 5, 5, 5, 5, 5, 1, 0, 5, 5, 5, 5, 5, 5, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 8, 6, 6, 6, 6, 6, 6, 8, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 8, 6, 8, 6, 8, 6, 8, 6, 8, 1, 1, 1, 1, 1, 1, 0, 4, 4, 4},
@@ -406,12 +406,17 @@ enum CarState {
     MOVING_FORWARD,
     TURNING,
     TURNING_RIGHT,
-    STOPPED
+    STOPPED,
+    STOP_SECOND,
+    CRASH,
 };
 enum cameraMode {
     CAMERA_FOLLOW,
     TRACKING,
-    SPIN
+    SPIN,
+    ASCEND,
+    TRACK_ESCAPING
+
 };
 static cameraMode camMode = TRACKING;
 static CarState carState = MOVE_LEFT;
@@ -456,6 +461,14 @@ extern "C" {
         auto policeT = ecs->GetTransformRef(police);
         policeT.SetPosition({ 8.0f, 0.0f, 9.0f });
         policeT.SetScale({ 0.25f,0.25f,0.25f });
+        policeT.SetRotation(glm::angleAxis(2*1.5708f, glm::vec3({ 0,1,0 })));
+
+        Ref<Model> model_car2 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/red_car.glb"));
+        car2 = ecs->Instantiate(null, Component::Transform(), model_car2);
+        auto car2T = ecs->GetTransformRef(car2);
+        car2T.SetPosition({ 8.0f,0.05f,8.0f });
+        car2T.SetScale({ 0.25f,0.25f,0.25f });
+
         //policeT.SetRotation(glm::angleAxis(1.5708f, glm::vec3({ 0,1,0 })));
     // Load building models (if present) and assign to city
 
@@ -503,18 +516,24 @@ extern "C" {
         auto carTransform = ecs->GetTransformRef(car);
         glm::vec3 carPos = carTransform.GetPosition();
         glm::quat carRot = carTransform.GetRotation();
+
+        auto car2T = ecs->GetTransformRef(car2);
+        glm::vec3 car2Pos = car2T.GetPosition();
+
         auto policeT = ecs->GetTransformRef(police);
         glm::vec3 polpos = policeT.GetPosition();
         // Extract car's Y-axis rotation (yaw)
         glm::vec3 carEuler = glm::eulerAngles(carRot);
         float carYaw = carEuler.y;
+        float carYaw2 = 0.0f;
+        float y = 0.0f;
         switch (camMode) {
         case CAMERA_FOLLOW: {
             // Smooth rotation interpolation
             smoothCarRotation = glm::mix(smoothCarRotation, carYaw, 0.1f);
 
             // Camera follows behind the car
-            float distance = 0.01f;  // distance behind car
+            float distance = 0.0f;  // distance behind car
             float height = 0.32f;     // height above car
 
             // Calculate camera offset in car's local space
@@ -536,7 +555,7 @@ extern "C" {
            // cameraTransform.RotateAround(carPos, 1.0f);
 
             // Make camera look at car
-            camComp->LookAt(smoothCamPos, carTransform.Forward() + carPos);
+            camComp->LookAt(targetCamPos, carTransform.Forward() + carPos);
             break;
         }
         case TRACKING: {
@@ -547,6 +566,15 @@ extern "C" {
 
             // Make camera look at car
             camComp->LookAt(trackingPos, carPos);
+            break;
+        }
+        case ASCEND: {
+            auto cameraTransform = ecs->GetTransformRef(camera);
+            glm::vec3 camPos = cameraTransform.GetPosition();
+            if (camPos.y <= 10.0f)
+                camPos.y += 0.1f;
+            cameraTransform.SetPosition(glm::vec3{carPos.x,camPos.y,carPos.z});
+            camComp->LookAt(glm::vec3{ carPos.x,camPos.y,carPos.z }, polpos);
             break;
         }
         case SPIN: {
@@ -573,6 +601,24 @@ extern "C" {
             // Keep camera looking at car
             camComp->LookAt(spinCamPos, glm::vec3{ 8,0,-18 });
             break;
+        }
+        case TRACK_ESCAPING: {
+           // Camera follows behind the car
+            float distance = 0.0f;  // distance behind car
+            float height = 0.32f;     // height above car
+
+            glm::vec3 localOffset = glm::vec3(
+                sin(smoothCarRotation) * distance,
+                height,
+                cos(smoothCarRotation) * distance
+            );
+
+            glm::vec3 targetCamPos = carPos + localOffset;
+            auto cameraTransform = ecs->GetTransformRef(camera);
+         
+            camComp->LookAt(targetCamPos, car2Pos);
+            break;
+
         }
         }
         // Rotate car wheels
@@ -624,15 +670,41 @@ extern "C" {
                 }
                 break;
             case STOPPED:
-                polpos.z -= 10.0f * deltaTime;
+                polpos.z -= 4.0f * deltaTime;
                 carYaw = -1.5708f;
+                car2Pos.z-=4.0f*deltaTime;
+                camMode = ASCEND;
+                if (polpos.z < -15) {
+                    polpos.z = -15;
+                    carState = STOP_SECOND;
+                    camMode = TRACK_ESCAPING;
+
+                }
                 break;
+            case STOP_SECOND:
+                car2Pos.x -= 2.0f*deltaTime;
+                car2Pos.z -= 2.0f*deltaTime;
+                carYaw2 = 1.5708f / 2;
+                if (car2Pos.z < -18.75) {
+                    carState = CRASH;
+                    car2Pos.z = -18.75;
+                }
+                break;
+            case CRASH:
+                carYaw2= 1.5708f / 2;
+                break;
+                
             }
+            car2T.SetRotation(glm::angleAxis(carYaw2, glm::vec3({ 0,1,0 })));
+            car2T.SetPosition(car2Pos);
             policeT.SetPosition(polpos);
             carTransform.SetPosition(pos);
             carTransform.SetRotation(glm::angleAxis(carYaw, glm::vec3(0.0f, 1.0f, 0.0f)));
+            }
+
+            // Apply updated transforms back to ECS components so changes take effect
+
         }
-    }
 
     void scene_render() {
         city.shader->Enable();
