@@ -17,6 +17,7 @@ namespace Engine {
 	Application::Application(std::shared_ptr<Window> window, std::shared_ptr<VFS> vfs, std::shared_ptr<ResourceSystem> rs, std::shared_ptr<ECS> ecs)
 		: m_Vfs{ vfs }, m_Rs{ rs }, m_Ecs{ ecs }, m_Window{ window } {
 		g_Application_Instance = this;
+		m_Renderer = std::make_shared<Renderer>();
 		Log::trace("Initializing Grinder Application");
 	}
 
@@ -100,7 +101,7 @@ namespace Engine {
 		return m_LayerStack;
 	}
 
-	Renderer& Application::GetRenderer() const {
-		return const_cast<Renderer&>(m_Renderer);
+	std::shared_ptr<Renderer> Application::GetRenderer() const {
+		return m_Renderer;
 	}
 }

@@ -1,18 +1,55 @@
 #include <engine/renderer.hpp>
 #include <engine/resource.hpp>
 #include <engine/application.hpp>
+#include <engine/perf_profiler.hpp>
 #include <algorithm>
 
 namespace Engine {
 
+    Renderer::ComputeShader::ComputeShader(const std::filesystem::path& filepath) {
+        GLuint cullShader = glCreateShader(GL_COMPUTE_SHADER);
+
+        std::string src = ReadFile(filepath);
+        const char* csrc = src.c_str();
+        glShaderSource(cullShader, 1, &csrc, nullptr);
+        glCompileShader(cullShader);
+
+        // check compile log
+        GLint ok = 0;
+        glGetShaderiv(cullShader, GL_COMPILE_STATUS, &ok);
+        if (!ok) {
+            char log[4096];
+            glGetShaderInfoLog(cullShader, sizeof(log), nullptr, log);
+            fprintf(stderr, "Compute shader error:\n%s\n", log);
+            ENGINE_THROW("Compute shader compilation failed");
+        }
+
+        program = glCreateProgram();
+        glAttachShader(program, cullShader);
+        glLinkProgram(program);
+        glDeleteShader(cullShader);
+    }
+
+    Renderer::ComputeShader::~ComputeShader() {
+        glDeleteProgram(program);
+    }
+
     // ========== Public API ==========
 
     ENGINE_API Renderer::Renderer() {
+        Ref<VFS> vfs = Engine::Application::Get().GetVFS();
+
         glGenBuffers(1, &m_ssbo); // Prepare our reusable ssbo for instancing
+        glGenBuffers(1, &m_instancesSSBO);
+        // Load our cull shader
+        m_cullShader = new ComputeShader(vfs->GetEngineResourcePath("assets/shaders/culling.glsl"));
+        glGenBuffers(1, &m_visibilitySSBO);
+        glGenBuffers(1, &m_frustumUBO);
     }
 
     ENGINE_API Renderer::~Renderer() {
         glDeleteBuffers(1, &m_ssbo);
+        delete m_cullShader;
     }
 
     void Renderer::SetCamera(Transform* transform, Camera* camera) {
@@ -30,43 +67,21 @@ namespace Engine {
     void Renderer::Queue(Transform* transform, Mesh* mesh, Material* material) {
         if (!mesh || !material || !material->shader) return;
 
-        // Determine if transparent
-        if (material->isTransparent) {
-            // Calculate distance to camera for sorting
-            float distance = 0.0f;
-            if (m_hasCameraSet) {
-                vec3 objPos = transform->position;
-                distance = glm::length(m_cameraPosition - objPos);
-            }
-
-            DrawCommand cmd;
-            cmd.transform = transform;
-            cmd.mesh = mesh;
-            cmd.material = material;
-            cmd.distanceToCamera = distance;
-            m_transparentQueue.push_back(cmd);
-        }
-        else {
-            // Batch opaque objects
-            BatchKey key{ mesh, material, material->shader.get() };
-
-            auto& batch = m_opaqueBatches[key];
-            batch.mesh = mesh;
-            batch.material = material;
-            batch.modelMatrices.push_back(transform->modelMatrix);
-        }
+        // Enqueue for culling
+        m_gpuInstanceData.emplace_back(transform->modelMatrix, mesh->bsphere);
+        m_gpuInstances.emplace_back(transform, mesh, material);
     }
 
     void Renderer::QueueDrawable3D(Transform* transform, Component::Drawable3D* drawable) {
         if (!drawable || !drawable->model) return;
 
-        // Frustum culling using model's bounding box
-        if (m_hasCameraSet) {
-            if (!IsBoxInFrustum(drawable->model->bounds, transform->modelMatrix)) {
-                m_stats.culledObjects++;
-                return; // Object is outside frustum, skip
-            }
-        }
+        //// Frustum culling using model's bounding box - moved to render stage
+        //if (m_hasCameraSet) {
+        //    if (!IsBoxInFrustum(drawable->model->bounds, transform->modelMatrix)) {
+        //        m_stats.culledObjects++;
+        //        return; // Object is outside frustum, skip
+        //    }
+        //}
 
         // Queue all mesh entries in the collection
         const auto& collection = drawable->GetCollection();
@@ -80,6 +95,74 @@ namespace Engine {
         m_queuedLights.emplace_back(transform, light);
     }
 
+    void Renderer::ProcessQueue() {
+        // No camera? No drawing
+        if (!m_camera) return;
+
+        PERF_BEGIN("Renderer_Culling");
+        // Upload our queued stuff
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_instancesSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, m_gpuInstanceData.size() * sizeof(GPU_InstanceData), m_gpuInstanceData.data(), GL_DYNAMIC_DRAW);
+        
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_visibilitySSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, m_gpuInstanceData.size() * sizeof(uint32_t), nullptr, GL_DYNAMIC_DRAW);
+        
+        glBindBuffer(GL_UNIFORM_BUFFER, m_frustumUBO);
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(Frustum), &m_frustum, GL_DYNAMIC_DRAW);
+
+        // Bind and dispatch computer shader
+        glUseProgram(m_cullShader->program);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_instancesSSBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_visibilitySSBO);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 3, m_frustumUBO);
+        glDispatchCompute((m_gpuInstanceData.size() + 255) / 256, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        PERF_END("Renderer_Culling");
+
+        PERF_BEGIN("Renderer_Cmd");
+        // Now we build the draw batches
+        // Fetch data from gpu
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_visibilitySSBO);
+        uint32_t* visibleFlags = (uint32_t*)glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, m_gpuInstanceData.size() * sizeof(uint32_t), GL_MAP_READ_BIT);
+
+        // Construct batches themselves
+        for (size_t i = 0; i < m_gpuInstances.size(); i++) {
+            if (!visibleFlags[i]) {
+                m_stats.culledObjects++;
+                continue;
+            }
+
+            // Determine if transparent
+            const GPUInstance& instance = m_gpuInstances[i];
+            if (instance.material->isTransparent) {
+                // Calculate distance to camera for sorting
+                float distance = 0.0f;
+                if (m_hasCameraSet) {
+                    vec3 objPos = instance.transform->position;
+                    distance = glm::length(m_cameraPosition - objPos);
+                }
+
+                DrawCommand cmd;
+                cmd.transform = instance.transform;
+                cmd.mesh = instance.mesh;
+                cmd.material = instance.material;
+                cmd.distanceToCamera = distance;
+                m_transparentQueue.push_back(cmd);
+            }
+            else {
+                // Batch opaque objects
+                BatchKey key{ instance.mesh, instance.material, instance.material->shader.get() };
+
+                auto& batch = m_opaqueBatches[key];
+                batch.mesh = instance.mesh;
+                batch.material = instance.material;
+                batch.modelMatrices.push_back(instance.transform->modelMatrix);
+            }
+        }
+        glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+        PERF_END("Renderer_Cmd");
+    }
+
     void Renderer::Draw() {
         if (!m_hasCameraSet) return;
 
@@ -90,6 +173,9 @@ namespace Engine {
             m_stats.totalObjects += batch.modelMatrices.size();
         }
         m_stats.totalObjects += m_transparentQueue.size();
+
+        // Run global culling
+        ProcessQueue();
 
         // Process lights into world space
         ProcessLights(); // TODO!
@@ -118,6 +204,8 @@ namespace Engine {
         if (m_useFramebuffer) {
             EndFramebufferPass(); // TODO
         }
+        auto stats = m_stats;
+        int a = 2;
     }
 
     void Renderer::Clear() {
@@ -125,6 +213,8 @@ namespace Engine {
         m_transparentQueue.clear();
         m_queuedLights.clear();
         m_processedLights.clear();
+        m_gpuInstanceData.clear();
+        m_gpuInstances.clear();
         m_stats = Stats{};
     }
 

@@ -4,20 +4,7 @@
 #include <engine/exception.hpp>
 
 namespace Engine {
-    struct BBox {
-        glm::vec3 min;
-        glm::vec3 max;
-
-        glm::vec3 center() const { return (min + max) * 0.5f; }
-        glm::vec3 size() const { return max - min; }
-        glm::vec3 extents() const { return size() * 0.5f; }  // Half-size
-
-        bool contains(const glm::vec3& point) const {
-            return point.x >= min.x && point.x <= max.x &&
-                point.y >= min.y && point.y <= max.y &&
-                point.z >= min.z && point.z <= max.z;
-        }
-    };
+    ENGINE_API std::string ReadFile(const std::filesystem::path&);
 
     struct IResource {
     public:
@@ -118,6 +105,9 @@ namespace Engine {
         u32 vbo = 0;
         u32 ebo = 0;
         u32 indicesCount = 0;
+
+        BBox bbox;
+        BSphere bsphere;
 
         ENGINE_API void Bind() const;
         ENGINE_API void Draw() const;

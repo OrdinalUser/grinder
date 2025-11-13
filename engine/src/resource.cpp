@@ -132,6 +132,17 @@ GLenum getGLFormat(int channels) {
 }
 
 namespace Engine {
+    ENGINE_API std::string ReadFile(const std::filesystem::path& filepath) {
+        std::ifstream file(filepath);
+        if (!file.is_open()) {
+            ENGINE_THROW("Failed to open file: " + filepath.string());
+        }
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        return buffer.str();
+    }
+
     namespace DefaultAssets {
         std::shared_ptr<Texture> GetDefaultColorTexture() {
             return Application::Get().GetResourceSystem()->load<Texture>(Application::Get().GetVFS()->GetEngineResourcePath("assets/textures/white1x1.png"));
@@ -833,6 +844,19 @@ namespace Engine {
     }
 
     Mesh::Mesh(std::vector<Vertex>& vertices, std::vector<u32>& indices) : indicesCount{ static_cast<u32>(indices.size()) } {
+        // Find our bounding box
+        vec3 min = vertices[0].position;
+        vec3 max = vertices[0].position;
+        for (auto& v : vertices) {
+            min = glm::min(min, v.position);
+            max = glm::max(max, v.position);
+        }
+        bbox = { .min = min, .max = max };
+        // vec3 center = (min + max) * 0.5f;
+        vec3 center = bbox.center();
+        float radius = glm::length(max - center);
+        bsphere = {.center = center, .radius = radius };
+
         glGenVertexArrays(1, &vao);
         glGenBuffers(1, &vbo);
         glGenBuffers(1, &ebo);

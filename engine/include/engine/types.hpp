@@ -277,4 +277,24 @@ namespace Engine {
         };
     }
 
+    struct BBox {
+        glm::vec3 min;
+        glm::vec3 max;
+
+        glm::vec3 center() const { return (min + max) * 0.5f; }
+        glm::vec3 size() const { return max - min; }
+        glm::vec3 extents() const { return size() * 0.5f; }  // Half-size
+
+        bool contains(const glm::vec3& point) const {
+            return point.x >= min.x && point.x <= max.x &&
+                point.y >= min.y && point.y <= max.y &&
+                point.z >= min.z && point.z <= max.z;
+        }
+    };
+
+    struct BSphere {
+        vec3 center;
+        float radius;
+    };
+
 } // namespace Engine

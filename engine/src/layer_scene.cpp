@@ -27,7 +27,7 @@ namespace Engine {
 		Application& app = Application::Get();
 		std::shared_ptr<ECS> ecs = app.GetECS();
 		
-		Renderer& renderer = app.GetRenderer();
+		Renderer& renderer = *app.GetRenderer().get();
 		PERF_BEGIN("Render_Queue");
 		m_Scene->Render();
 

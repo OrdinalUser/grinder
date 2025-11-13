@@ -36,6 +36,13 @@ namespace Engine {
     private:
         // ========== Data Structures ==========
 
+        struct ComputeShader {
+            ComputeShader(const std::filesystem::path& filepath);
+            ~ComputeShader();
+
+            unsigned int program;
+        };
+
         struct DrawCommand {
             Transform* transform;
             Mesh* mesh;
@@ -83,6 +90,18 @@ namespace Engine {
             float outerCutoff; // Spot
         };
 
+        // GPU sided struct
+        struct GPU_InstanceData {
+            mat4 modelMatrix;
+            BSphere bSphere;
+        };
+
+        struct GPUInstance {
+            Transform* transform;
+            Mesh* mesh;
+            Material* material;
+        };
+
         // Frustum planes (extracted from projView matrix)
         struct Frustum {
             vec4 planes[6]; // left, right, bottom, top, near, far
@@ -98,6 +117,9 @@ namespace Engine {
         bool m_hasCameraSet = false;
 
         // Render queues
+        std::vector<GPUInstance> m_gpuInstances;
+        std::vector<GPU_InstanceData> m_gpuInstanceData;
+
         std::unordered_map<BatchKey, InstanceBatch, BatchKeyHash> m_opaqueBatches;
         std::vector<DrawCommand> m_transparentQueue;
 
@@ -117,6 +139,12 @@ namespace Engine {
         
         // Batching & instancing
         GLuint m_ssbo = 0;
+
+        GLuint m_instancesSSBO;
+        GLuint m_visibilitySSBO;
+        GLuint m_frustumUBO;
+
+        ComputeShader* m_cullShader;
 
         // Stats
         Stats m_stats;
@@ -138,6 +166,7 @@ namespace Engine {
 
         void ExtractFrustumPlanes();
         bool IsBoxInFrustum(const BBox& bbox, const mat4& modelMatrix) const;
+        void ProcessQueue();
 
         void BeginFramebufferPass();
         void EndFramebufferPass();
