@@ -35,8 +35,8 @@ namespace Engine {
 		// This is the key function for ImGui and other libraries
 		ENGINE_API GLFWwindow* GetNativeWindow() const { return m_Window; }
 
+		ENGINE_API bool HasResized();
 		ENGINE_API void Resize(int width, int height);
-
 		ENGINE_API float GetAspectRatio() const;
 
 	private:
@@ -52,5 +52,6 @@ namespace Engine {
 		};
 
 		WindowData m_Data;
+		bool m_HasResized;
 	};
 }

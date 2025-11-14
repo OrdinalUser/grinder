@@ -10,6 +10,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <string>
+#include <list>
 #include <vector>
 #include <unordered_map>
 #include <queue>
@@ -67,6 +68,9 @@ namespace Engine {
 
     template<typename T>
     using vector = std::vector<T>;
+
+    template<typename T>
+    using list = std::vector<T>;
 
     template<typename K, typename V>
     using unordered_map = std::unordered_map<K, V>;

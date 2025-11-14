@@ -4,6 +4,7 @@
 #include <engine/application.hpp>
 #include <engine/resource.hpp>
 #include <engine/vfs.hpp>
+#include <engine/renderer.hpp>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -657,6 +658,44 @@ namespace Engine {
         }
         ImGui::End();
     }
+
+    void DrawRenderer() {
+        // drawCalls = 0;
+        // instancedDrawCalls = 0;
+        // totalObjects = 0;
+        // batchCount = 0;
+        // culledObjects = 0;
+        Ref<Renderer> renderer = Engine::Application::Get().GetRenderer();
+
+        if (ImGui::Begin("Renderer")) {
+            if (ImGui::CollapsingHeader("Stats", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_FramePadding)) {
+                Renderer::Stats avg{ 0 };
+                for (const Renderer::Stats& s : renderer->GetStats()) {
+                    avg.drawCalls += s.drawCalls;
+                    avg.instancedDrawCalls += s.instancedDrawCalls;
+                    avg.totalObjects += s.totalObjects;
+                    avg.batchCount += s.batchCount;
+                    avg.culledObjects += s.culledObjects;
+                    avg.drawnObjects += s.drawnObjects;
+                }
+                avg.drawCalls /= renderer->GetStats().size();
+                avg.instancedDrawCalls /= renderer->GetStats().size();
+                avg.totalObjects /= renderer->GetStats().size();
+                avg.batchCount /= renderer->GetStats().size();
+                avg.culledObjects /= renderer->GetStats().size();
+                avg.drawnObjects /= renderer->GetStats().size();
+
+                ImGui::Text("Average over %d frames:", renderer->GetStats().size());
+                ImGui::Text("> Draw Calls     : %d", avg.drawCalls);
+                ImGui::Text("> Instanced Calls: %d", avg.instancedDrawCalls);
+                ImGui::Text("> Total objects  : %d", avg.totalObjects);
+                ImGui::Text("> Drawn objects  : %d", avg.drawnObjects);
+                ImGui::Text("> Batch counts   : %d", avg.batchCount);
+                ImGui::Text("> Culled objects : %d", avg.culledObjects);
+            }
+        }
+        ImGui::End();
+    }
 	
     void DebugLayer::OnRender(const std::vector<entity_id>& updatedEntities) {
 		(void)updatedEntities;
@@ -667,6 +706,7 @@ namespace Engine {
         DrawHierarchyViewer(updatedEntities);
         DrawPerf();
         DrawLayerStack();
+        DrawRenderer();
 
 		End();
 	}

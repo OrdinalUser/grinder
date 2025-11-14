@@ -50,7 +50,7 @@ void scene_update(float deltaTime) {
     constexpr float ROTATION_SPEED = 0.25f;
     angle += ROTATION_SPEED * deltaTime;
 
-    constexpr float radius = 2.5;
+    constexpr float radius = 2.5f;
     auto trans = ecs->GetTransformRef(camera);
     float camX = radius * cos(angle);
     float camZ = radius * sin(angle);

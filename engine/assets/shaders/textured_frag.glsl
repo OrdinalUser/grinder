@@ -42,7 +42,7 @@ void main() {
     vec3 normal = normalize(TBN * texNormal);
     
     // Ambient
-    float ambientStrength = 0.1;
+    float ambientStrength = 0.05;
     vec3 ambient = ambientStrength * uLightColor * texDiffuse.rgb;
     
     // Diffuse

@@ -25,7 +25,7 @@ uniform vec3 uLightColor;
 
 void main() {
     // Ambient
-    float ambientStrength = 0.1;
+    float ambientStrength = 0.005;
     vec3 ambient = ambientStrength * uLightColor * uMaterial.diffuseColor;
     
     // Diffuse

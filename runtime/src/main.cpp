@@ -47,7 +47,7 @@ int main() {
             Engine::Application app(window, vfs, rs, ecs);
 
             // load our scene as a layer
-            const std::string scene_name = "demo";
+            const std::string scene_name = "dev";
 #if _DEBUG
 // Thanks CMake for marking my lib with 'd'
             const std::string dllName = "scene_" + scene_name + "d.dll";

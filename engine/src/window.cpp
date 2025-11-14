@@ -6,7 +6,7 @@
 #include <GLFW/glfw3.h>
 
 namespace Engine {
-	Window::Window(const WindowProps& props) {
+	Window::Window(const WindowProps& props) : m_HasResized{ false }  {
 		Init(props);
 	}
 
@@ -52,7 +52,7 @@ namespace Engine {
 			auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
 			if (self) self->Resize(width, height);
 		});
-		glfwSwapInterval(1); // Turn on V-Sync
+		glfwSwapInterval(0); // Turn on V-Sync
 	}
 
 	void Window::Shutdown() {
@@ -64,10 +64,19 @@ namespace Engine {
 		glfwSwapBuffers(m_Window);
 	}
 
+	bool Window::HasResized() {
+		if (m_HasResized) {
+			m_HasResized = false;
+			return true;
+		}
+		return false;
+	}
+
 	void Window::Resize(int width, int height) {
 		m_Data.Width = width;
 		m_Data.Height = height;
 		glViewport(0, 0, width, height);
+		m_HasResized = true;
 	}
 
 	float Window::GetAspectRatio() const {

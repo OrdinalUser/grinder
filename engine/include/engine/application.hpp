@@ -32,6 +32,8 @@ namespace Engine {
 		ENGINE_API LayerStack& GetLayerStack();
 
 		ENGINE_API std::shared_ptr<Renderer> GetRenderer() const;
+
+		ENGINE_API void OnResize(unsigned int width, unsigned int height);
 	private:
 		std::shared_ptr<Window> m_Window;
 		LayerStack m_LayerStack;

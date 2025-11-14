@@ -286,7 +286,7 @@ public:
                     entity_id e = ecs->Instantiate(city_parent, Component::Transform(), roadModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
-                    ref.SetScale({ (tileSize / 8.0f), 0.05f,  (tileSize / 8.0f) });
+                    ref.SetScale({ tileSize / 2.0f, 1.0f, tileSize / 2.0f });
                     continue;
                 }
                 else if (tile == 6 && roadModel) {
@@ -295,7 +295,7 @@ public:
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetRotation(glm::angleAxis(-1.5708f, glm::vec3(0.0f, 1.0f, 0.0f)));
-                    ref.SetScale({ (tileSize / 8.0f), 0.05f,  (tileSize / 8.0f) });
+                    ref.SetScale({ tileSize / 2.0f, 1.0f, tileSize / 2.0f });
                     continue;
                 }
                 else if (tile == 8 && cross) {
@@ -303,7 +303,7 @@ public:
                     entity_id e = ecs->Instantiate(city_parent, Component::Transform(), cross);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
-                    ref.SetScale({ (tileSize / 8.0f), 0.05f,  (tileSize / 8.0f) });
+                    ref.SetScale({ tileSize/2.0f, 1.0f, tileSize/2.0f});
                     continue;
                 }
                 else if (tile == 3 && pummpModel) {
@@ -327,7 +327,9 @@ public:
                     entity_id e = ecs->Instantiate(city_parent, Component::Transform(), roadModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
-                    ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
+                    ref.SetScale({ tileSize / 2.0f, 1.0f, tileSize / 2.0f });
+                    // ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
+                    // ref.SetScale({ tileSize, 1.0f, tileSize });
 
                     std::cout << worldX << "|" << worldZ << std::endl;
                     continue;

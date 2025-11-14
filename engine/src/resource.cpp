@@ -101,33 +101,33 @@ static std::pair<int, int> calculateResizeDimensions(int orig_w, int orig_h,
 
 GLenum toGLFilter(Engine::LoadCfg::TextureFilter filter) {
     switch (filter) {
-    case Engine::LoadCfg::TextureFilter::Nearest: return GL_NEAREST;
-    case Engine::LoadCfg::TextureFilter::Linear: return GL_LINEAR;
-    case Engine::LoadCfg::TextureFilter::NearestMipmapNearest: return GL_NEAREST_MIPMAP_NEAREST;
-    case Engine::LoadCfg::TextureFilter::LinearMipmapNearest: return GL_LINEAR_MIPMAP_NEAREST;
-    case Engine::LoadCfg::TextureFilter::NearestMipmapLinear: return GL_NEAREST_MIPMAP_LINEAR;
-    case Engine::LoadCfg::TextureFilter::LinearMipmapLinear: return GL_LINEAR_MIPMAP_LINEAR;
-    default: return GL_LINEAR;
+        case Engine::LoadCfg::TextureFilter::Nearest: return GL_NEAREST;
+        case Engine::LoadCfg::TextureFilter::Linear: return GL_LINEAR;
+        case Engine::LoadCfg::TextureFilter::NearestMipmapNearest: return GL_NEAREST_MIPMAP_NEAREST;
+        case Engine::LoadCfg::TextureFilter::LinearMipmapNearest: return GL_LINEAR_MIPMAP_NEAREST;
+        case Engine::LoadCfg::TextureFilter::NearestMipmapLinear: return GL_NEAREST_MIPMAP_LINEAR;
+        case Engine::LoadCfg::TextureFilter::LinearMipmapLinear: return GL_LINEAR_MIPMAP_LINEAR;
+        default: return GL_LINEAR;
     }
 }
 
 GLenum toGLWrap(Engine::LoadCfg::TextureWrap wrap) {
     switch (wrap) {
-    case Engine::LoadCfg::TextureWrap::Repeat: return GL_REPEAT;
-    case Engine::LoadCfg::TextureWrap::MirroredRepeat: return GL_MIRRORED_REPEAT;
-    case Engine::LoadCfg::TextureWrap::ClampToEdge: return GL_CLAMP_TO_EDGE;
-    case Engine::LoadCfg::TextureWrap::ClampToBorder: return GL_CLAMP_TO_BORDER;
-    default: return GL_REPEAT;
+        case Engine::LoadCfg::TextureWrap::Repeat: return GL_REPEAT;
+        case Engine::LoadCfg::TextureWrap::MirroredRepeat: return GL_MIRRORED_REPEAT;
+        case Engine::LoadCfg::TextureWrap::ClampToEdge: return GL_CLAMP_TO_EDGE;
+        case Engine::LoadCfg::TextureWrap::ClampToBorder: return GL_CLAMP_TO_BORDER;
+        default: return GL_REPEAT;
     }
 }
 
 GLenum getGLFormat(int channels) {
     switch (channels) {
-    case 1: return GL_RED;
-    case 2: return GL_RG;
-    case 3: return GL_RGB;
-    case 4: return GL_RGBA;
-    default: return GL_RGB;
+        case 1: return GL_RED;
+        case 2: return GL_RG;
+        case 3: return GL_RGB;
+        case 4: return GL_RGBA;
+        default: return GL_RGB;
     }
 }
 
@@ -149,7 +149,7 @@ namespace Engine {
         }
 
         std::shared_ptr<Texture> GetDefaultNormalTexture() {
-            return Application::Get().GetResourceSystem()->load<Texture>(Application::Get().GetVFS()->GetEngineResourcePath("assets/textures/normal1x1.png"));
+            return Application::Get().GetResourceSystem()->load<Texture>(Application::Get().GetVFS()->GetEngineResourcePath("assets/textures/normal1x1.png"), LoadCfg::Texture{.texFormat=LoadCfg::TextureFormat::RGB});
         }
 
         std::shared_ptr<Shader> GetUnlitShader() {
@@ -250,13 +250,14 @@ namespace Engine {
         glGenTextures(1, &id);
         glBindTexture(GL_TEXTURE_2D, id);
 
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-        GLenum format = (img.channels == 4) ? GL_RGBA : GL_RGB;
-        glTexImage2D(GL_TEXTURE_2D, 0, format, img.width, img.height, 0, format, GL_UNSIGNED_BYTE, img.data);
+        GLenum imgFormat = img.channels == 3 ? GL_RGB : GL_RGBA;
+        GLenum texFormat = imgFormat == GL_RGB ? GL_SRGB : GL_SRGB_ALPHA;
+        glTexImage2D(GL_TEXTURE_2D, 0, texFormat, img.width, img.height, 0, imgFormat, GL_UNSIGNED_BYTE, img.data);
         glGenerateMipmap(GL_TEXTURE_2D);
 
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -342,12 +343,21 @@ namespace Engine {
         glGenTextures(1, &tex->id);
         glBindTexture(GL_TEXTURE_2D, tex->id);
 
+        GLenum imgFormat = image->channels == 3 ? GL_RGB : GL_RGBA;
+        GLenum texFormat = imgFormat == GL_RGB ? GL_SRGB : GL_SRGB_ALPHA;
+        if (cfg.texFormat != LoadCfg::TextureFormat::Auto) {
+            if (cfg.texFormat == LoadCfg::TextureFormat::RGB) texFormat = GL_RGB;
+            else if (cfg.texFormat == LoadCfg::TextureFormat::RGBA) texFormat = GL_RGBA;
+            else if (cfg.texFormat == LoadCfg::TextureFormat::SRGB) texFormat = GL_SRGB;
+            else if (cfg.texFormat == LoadCfg::TextureFormat::SRGB_ALPHA) texFormat = GL_SRGB_ALPHA;
+        }
+
         // Upload texture data
         GLenum format = getGLFormat(image->channels);
         glTexImage2D(
-            GL_TEXTURE_2D, 0, format,
+            GL_TEXTURE_2D, 0, texFormat,
             tex->width, tex->height, 0,
-            format, GL_UNSIGNED_BYTE, image->data
+            imgFormat, GL_UNSIGNED_BYTE, image->data
         );
 
         // Set texture parameters
@@ -924,6 +934,10 @@ namespace Engine {
     u32 Shader::GetUniformLoc(const std::string& name) const {
         // return glGetUniformLocation(program, name.c_str());
         return m_CacheLoc.at(name);
+    }
+
+    void Shader::SetUniform(const std::string& name, const int v) const {
+        glUniform1i(GetUniformLoc(name), v);
     }
 
     void Shader::SetUniform(const std::string& name, const float v) const {

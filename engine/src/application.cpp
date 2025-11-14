@@ -23,17 +23,21 @@ namespace Engine {
 
 	void Application::Run() {
 		// Default GL state variables
-		glClearColor(0.1f, 0.1f, 0.1f, 1);
+		glClearColor(0.0086f, 0.0086f, 0.0086f, 1); // CHANGE: Gamma corrected values
 		glEnable(GL_DEPTH_TEST);
 
 		using clock = std::chrono::steady_clock;
 		auto lastTime = clock::now();
 		float accumulator = 0.0f;
-		constexpr float fixedDelta = 1.0f / 60.0f; // 60 Hz fixed update
+		constexpr float fixedDelta = 1.0f / 50.0f; // 50 Hz fixed update
 		
 		while (m_Running) {
 			if (glfwWindowShouldClose(m_Window->GetNativeWindow()))
 				m_Running = false;
+
+			if (m_Window->HasResized()) {
+				OnResize(m_Window->GetWidth(), m_Window->GetHeight());
+			}
 			
 			// Compute time delta
 			auto now = clock::now();
@@ -103,5 +107,9 @@ namespace Engine {
 
 	std::shared_ptr<Renderer> Application::GetRenderer() const {
 		return m_Renderer;
+	}
+
+	ENGINE_API void Application::OnResize(unsigned int width, unsigned int height) {
+		m_Renderer->OnResize(width, height);
 	}
 }

@@ -28,6 +28,7 @@ namespace Engine {
         
         ENGINE_API u32 GetUniformLoc(const std::string& name) const;
 
+        ENGINE_API void SetUniform(const std::string& name, const int v) const;
         ENGINE_API void SetUniform(const std::string& name, const float v) const;
         ENGINE_API void SetUniform(const std::string& name, const vec2& v) const;
         ENGINE_API void SetUniform(const std::string& name, const vec3& v) const;
@@ -159,6 +160,14 @@ namespace Engine {
             RGBA = 4
         };
 
+        enum class TextureFormat {
+            Auto = 0,
+            RGB = 3,
+            RGBA = 4,
+            SRGB = 5,
+            SRGB_ALPHA = 6
+        };
+
         enum class TextureFilter {
             Nearest,
             Linear,
@@ -188,6 +197,7 @@ namespace Engine {
         // Has to inherit in a stupid way, sorry
         struct Texture {
             ColorFormat format = ColorFormat::RGB;
+            TextureFormat texFormat = TextureFormat::Auto;
             bool flip_vertically = false;
 
             // Resize options (0 = no resize)

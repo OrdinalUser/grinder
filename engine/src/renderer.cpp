@@ -4,7 +4,202 @@
 #include <engine/perf_profiler.hpp>
 #include <algorithm>
 
+constexpr static struct {
+    float BloomStrength = 0.8f;
+    float BrightnessThreshold = 1.0f;
+} RendererConfig;
+
+static const char* GLErrorToString(GLenum err) {
+    switch (err) {
+        case GL_NO_ERROR:                      return "GL_NO_ERROR";
+        case GL_INVALID_ENUM:                  return "GL_INVALID_ENUM";
+        case GL_INVALID_VALUE:                 return "GL_INVALID_VALUE";
+        case GL_INVALID_OPERATION:             return "GL_INVALID_OPERATION";
+        case GL_STACK_OVERFLOW:                return "GL_STACK_OVERFLOW";
+        case GL_STACK_UNDERFLOW:               return "GL_STACK_UNDERFLOW";
+        case GL_OUT_OF_MEMORY:                 return "GL_OUT_OF_MEMORY";
+        case GL_INVALID_FRAMEBUFFER_OPERATION: return "GL_INVALID_FRAMEBUFFER_OPERATION";
+        default:                               return "GL_UNKNOWN_ERROR";
+    }
+}
+
+inline void GLCheckError(const char* msg) {
+    for (GLenum err; (err = glGetError()) != GL_NO_ERROR; ) {
+        printf("[GL ERROR] %s: %s (0x%X)\n", msg, GLErrorToString(err), err);
+    }
+}
+
 namespace Engine {
+    // Helper utility to get OpenGL format details from our enum
+    static void GetTextureFormatDetails(Framebuffer::TextureFormat format, GLenum& internalFormat, GLenum& dataFormat, GLenum& type) {
+        switch (format) {
+        case Framebuffer::TextureFormat::RGB:
+            internalFormat = GL_RGB8;
+            dataFormat = GL_RGB;
+            type = GL_UNSIGNED_BYTE;
+            return;
+        case Framebuffer::TextureFormat::RGBA:
+            internalFormat = GL_RGBA8;
+            dataFormat = GL_RGBA;
+            type = GL_UNSIGNED_BYTE;
+            return;
+        case Framebuffer::TextureFormat::RGBA16F:
+            internalFormat = GL_RGBA16F;
+            dataFormat = GL_RGBA;
+            type = GL_FLOAT;
+            return;
+        case Framebuffer::TextureFormat::DEPTH24_STENCIL8:
+            internalFormat = GL_DEPTH24_STENCIL8;
+            dataFormat = GL_DEPTH_STENCIL;
+            type = GL_UNSIGNED_INT_24_8;
+            return;
+        default:
+            // Should not happen
+            internalFormat = 0;
+            dataFormat = 0;
+            type = 0;
+            return;
+        }
+    }
+
+    Framebuffer::Framebuffer(uint32_t width, uint32_t height) : m_Width{ width }, m_Height{ height } { }
+
+    Framebuffer::~Framebuffer() { Release(); }
+
+    Framebuffer& Framebuffer::AddColorAttachment(const AttachmentSpecification& spec) {
+        m_ColorAttachmentSpecs.push_back(spec);
+        return *this;
+    }
+
+    Framebuffer& Framebuffer::SetDepthAttachment(const AttachmentSpecification& spec) {
+        m_DepthAttachmentSpec = spec;
+        return *this;
+    }
+
+    void Framebuffer::Build() {
+        Invalidate();
+    }
+
+    void Framebuffer::Bind() const {
+        glBindFramebuffer(GL_FRAMEBUFFER, m_FramebufferID);
+        // glViewport(0, 0, m_Width, m_Height);
+    }
+
+    void Framebuffer::Unbind() const {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    void Framebuffer::Resize(uint32_t width, uint32_t height) {
+        if (width == 0 || height == 0) {
+            ENGINE_THROW("Attempting to resize framebuffer to zero size");
+            return;
+        }
+        // No need to resize
+        if (m_Width == width && m_Height == height) return;
+        m_Width = width;
+        m_Height = height;
+        Invalidate();
+    }
+
+    std::shared_ptr<Texture> Framebuffer::GetColorAttachment(uint32_t index) const {
+        if (index >= m_ColorAttachments.size()) {
+            throw std::out_of_range("Color attachment index out of range.");
+        }
+        return m_ColorAttachments[index];
+    }
+
+    std::shared_ptr<Texture> Framebuffer::GetDepthAttachment() const {
+        if (m_DepthAttachment == nullptr) {
+            ENGINE_THROW("Attempting to fetch unbound depth attachment");
+        }
+        return m_DepthAttachment;
+    }
+
+    void Framebuffer::Release() {
+        if (m_FramebufferID) {
+            glDeleteFramebuffers(1, &m_FramebufferID);
+            m_ColorAttachments.clear();
+            m_DepthAttachment.reset();
+            m_FramebufferID = 0;
+        }
+    }
+
+    void Framebuffer::Invalidate() {
+        // Drop a framebuffer if exists
+        if (m_FramebufferID) {
+            Release();
+        }
+
+        // Build our framebuffer from scratch
+        glGenFramebuffers(1, &m_FramebufferID);
+        glBindFramebuffer(GL_FRAMEBUFFER, m_FramebufferID);
+        glViewport(0, 0, m_Width, m_Height);
+
+        // Create and attach color components
+        if (!m_ColorAttachmentSpecs.empty()) {
+            m_ColorAttachments.resize(m_ColorAttachmentSpecs.size());
+            for (size_t i = 0; i < m_ColorAttachmentSpecs.size(); i++) {
+                const auto& spec = m_ColorAttachmentSpecs[i];
+                GLenum internalFormat, dataFormat, type;
+                GetTextureFormatDetails(spec.Format, internalFormat, dataFormat, type);
+
+                // Create the texture from specification
+                auto texture = std::make_shared<Texture>();
+                texture->width = m_Width;
+                texture->height = m_Height;
+                glGenTextures(1, &texture->id);
+                glBindTexture(GL_TEXTURE_2D, texture->id);
+                glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, m_Width, m_Height, 0, dataFormat, type, nullptr);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLuint>(spec.Filtering.Min));
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLuint>(spec.Filtering.Min));
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, static_cast<GLuint>(spec.Wrapping.S));
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, static_cast<GLuint>(spec.Wrapping.T));
+
+                // Attach and save
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, texture->id, 0);
+                m_ColorAttachments[i] = texture;
+            }
+        }
+
+        // Create and attach our depth components
+        if (m_DepthAttachmentSpec.has_value()) {
+            const auto& spec = m_DepthAttachmentSpec.value();
+            GLenum internalFormat, dataFormat, type;
+            GetTextureFormatDetails(spec.Format, internalFormat, dataFormat, type);
+
+            // Create the texture from specification
+            auto texture = std::make_shared<Texture>();
+            texture->width = m_Width;
+            texture->height = m_Height;
+            glGenTextures(1, &texture->id);
+            glBindTexture(GL_TEXTURE_2D, texture->id);
+            glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, m_Width, m_Height, 0, dataFormat, type, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLuint>(spec.Filtering.Min));
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLuint>(spec.Filtering.Min));
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, static_cast<GLuint>(spec.Wrapping.S));
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, static_cast<GLuint>(spec.Wrapping.T));
+
+            // Attach and save
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, texture->id, 0);
+            m_DepthAttachment = texture;
+        }
+
+        // Set draw buffers
+        if (m_ColorAttachments.size() > 1) {
+            std::vector<GLenum> buffers;
+            for (size_t i = 0; i < m_ColorAttachments.size(); ++i) {
+                buffers.push_back(GL_COLOR_ATTACHMENT0 + i);
+            }
+            glDrawBuffers(buffers.size(), buffers.data());
+        }
+        else if (m_ColorAttachments.empty()) {
+            glDrawBuffer(GL_NONE);
+            glReadBuffer(GL_NONE);
+        }
+
+        // Unbind for housekeeping
+        Unbind();
+    }
 
     Renderer::ComputeShader::ComputeShader(const std::filesystem::path& filepath) {
         GLuint cullShader = glCreateShader(GL_COMPUTE_SHADER);
@@ -36,20 +231,72 @@ namespace Engine {
 
     // ========== Public API ==========
 
+    void Renderer::OnResize(unsigned int width, unsigned int height) {
+        m_Framebuffer->Resize(width, height);
+        m_postProcessBrightFBO->Resize(width, height);
+        m_postProcessPongFBO[0]->Resize(width, height);
+        m_postProcessPongFBO[1]->Resize(width, height);
+    }
+
     ENGINE_API Renderer::Renderer() {
         Ref<VFS> vfs = Engine::Application::Get().GetVFS();
+        Ref<ResourceSystem> rs = Engine::Application::Get().GetResourceSystem();
+        Window& window = Engine::Application::Get().GetWindow();
 
+        // Drawing
         glGenBuffers(1, &m_ssbo); // Prepare our reusable ssbo for instancing
         glGenBuffers(1, &m_instancesSSBO);
-        // Load our cull shader
-        m_cullShader = new ComputeShader(vfs->GetEngineResourcePath("assets/shaders/culling.glsl"));
         glGenBuffers(1, &m_visibilitySSBO);
         glGenBuffers(1, &m_frustumUBO);
+
+        // Main framebuffer
+        // InitializeFramebuffer(window.GetWidth(), window.GetHeight());
+        m_Framebuffer = new Framebuffer(window.GetWidth(), window.GetHeight());
+        m_Framebuffer->AddColorAttachment()
+            .SetDepthAttachment()
+            .Build();
+    
+        // Create screen quad for post-processing
+        CreateScreenQuad();
+
+        //// Bloom post-processing
+        // Bright Extract
+        m_postProcessBrightFBO = new Framebuffer(window.GetWidth(), window.GetHeight());
+        m_postProcessBrightFBO->AddColorAttachment()
+            .Build();
+
+        m_postProcessPongFBO[0] = new Framebuffer(window.GetWidth(), window.GetHeight());
+        m_postProcessPongFBO[0]->AddColorAttachment()
+            .Build();
+        m_postProcessPongFBO[1] = new Framebuffer(window.GetWidth(), window.GetHeight());
+        m_postProcessPongFBO[1]->AddColorAttachment()
+            .Build();
+
+        // Shaders and other
+        m_cullShader = new ComputeShader(vfs->GetEngineResourcePath("assets/shaders/culling.glsl"));
+        m_postProcessingShader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/postprocess"));
+        m_brightPassShader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/postprocess_bright_extract"));
+        m_blurShader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/postprocess_blur"));
     }
 
     ENGINE_API Renderer::~Renderer() {
         glDeleteBuffers(1, &m_ssbo);
         delete m_cullShader;
+        glDeleteBuffers(1, &m_ssbo);
+        glDeleteBuffers(1, &m_instancesSSBO);
+        glDeleteBuffers(1, &m_visibilitySSBO);
+        glDeleteBuffers(1, &m_frustumUBO);
+
+        delete m_Framebuffer;
+        delete m_postProcessBrightFBO;
+        delete m_postProcessPongFBO[0];
+        delete m_postProcessPongFBO[1];
+        if (m_screenQuadVAO) glDeleteVertexArrays(1, &m_screenQuadVAO);
+        if (m_screenQuadVBO) glDeleteBuffers(1, &m_screenQuadVBO);
+
+        m_Framebuffer = nullptr;
+        m_screenQuadVAO = 0;
+        m_screenQuadVBO = 0;
     }
 
     void Renderer::SetCamera(Transform* transform, Camera* camera) {
@@ -74,14 +321,6 @@ namespace Engine {
 
     void Renderer::QueueDrawable3D(Transform* transform, Component::Drawable3D* drawable) {
         if (!drawable || !drawable->model) return;
-
-        //// Frustum culling using model's bounding box - moved to render stage
-        //if (m_hasCameraSet) {
-        //    if (!IsBoxInFrustum(drawable->model->bounds, transform->modelMatrix)) {
-        //        m_stats.culledObjects++;
-        //        return; // Object is outside frustum, skip
-        //    }
-        //}
 
         // Queue all mesh entries in the collection
         const auto& collection = drawable->GetCollection();
@@ -168,27 +407,18 @@ namespace Engine {
 
         // Reset stats
         m_stats = Stats{};
-        m_stats.totalObjects = 0;
-        for (const auto& [key, batch] : m_opaqueBatches) {
-            m_stats.totalObjects += batch.modelMatrices.size();
-        }
-        m_stats.totalObjects += m_transparentQueue.size();
+        m_stats.totalObjects = m_gpuInstances.size();
 
         // Run global culling
         ProcessQueue();
 
-        // Process lights into world space
+        BeginFramebufferPass();
+
+        // DepthPrepass
+        // TODO!
+
+        // Process lights into world space, clustered culling TODO
         ProcessLights(); // TODO!
-
-        // Optional: Render to framebuffer for post-processing
-        if (m_useFramebuffer) {
-            BeginFramebufferPass();
-        }
-
-        // Setup context
-        // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // cleared outside of renderer!
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LESS);
 
         // Render opaque geometry
         DrawOpaque();
@@ -200,12 +430,7 @@ namespace Engine {
 
         // Shadows, here?
 
-        // Optional: Apply post-processing
-        if (m_useFramebuffer) {
-            EndFramebufferPass(); // TODO
-        }
-        auto stats = m_stats;
-        int a = 2;
+        EndFramebufferPass();
     }
 
     void Renderer::Clear() {
@@ -215,6 +440,8 @@ namespace Engine {
         m_processedLights.clear();
         m_gpuInstanceData.clear();
         m_gpuInstances.clear();
+        if (m_Stats.size() > 10) m_Stats.pop_back();
+        m_Stats.insert(m_Stats.begin(), m_stats);
         m_stats = Stats{};
     }
 
@@ -244,6 +471,9 @@ namespace Engine {
     }
 
     void Renderer::SetLightUniforms(Shader* shader) {
+        shader->SetUniform("uLightPos", vec3(30, 100, 0));
+        // shader->SetUniform("uLightColor", vec3(0.19f, 0.19f, 0.64f)); // moonlight color, should be less intense! TODO!
+        shader->SetUniform("uLightColor", vec3(1.0f));
         // TODO: Light integration
         /*shader->SetUniform("uLightCount", static_cast<int>(m_processedLights.size()));
 
@@ -298,7 +528,9 @@ namespace Engine {
     // ========== Drawing ==========
 
     void Renderer::DrawOpaque() {
+        glEnable(GL_DEPTH_TEST);
         glDepthMask(GL_TRUE);
+        glDepthFunc(GL_LESS);
         glDisable(GL_BLEND);
 
         m_stats.batchCount = m_opaqueBatches.size();
@@ -306,9 +538,6 @@ namespace Engine {
         for (const auto& [key, batch] : m_opaqueBatches) {
             Shader* shader = key.shader;
             shader->Enable();
-
-            shader->SetUniform("uLightPos", m_cameraPosition);
-            shader->SetUniform("uLightColor", vec3(1, 1, 1));
 
             // Set common uniforms once per batch
             SetCommonUniforms(shader);
@@ -320,6 +549,7 @@ namespace Engine {
                 shader->SetUniform("uUseInstancing", false);
                 key.mesh->Draw();
                 m_stats.drawCalls++;
+                m_stats.drawnObjects++;
             }
             else {
                 /// Multiple objects - prepare an SSBO and do an instanced draw
@@ -334,6 +564,7 @@ namespace Engine {
                 glDrawElementsInstanced(GL_TRIANGLES, key.mesh->indicesCount, GL_UNSIGNED_INT, 0, batch.modelMatrices.size());
 
                 m_stats.instancedDrawCalls++;
+                m_stats.drawnObjects += batch.modelMatrices.size();
             }
         }
     }
@@ -360,9 +591,6 @@ namespace Engine {
             shader->SetUniform("uModel", cmd.transform->modelMatrix);
             shader->SetUniform("uUseInstancing", false);
 
-            shader->SetUniform("uLightPos", m_cameraPosition);
-            shader->SetUniform("uLightColor", vec3(1, 1, 1));
-
             // Draw
             cmd.mesh->Draw();
             m_stats.drawCalls++;
@@ -375,71 +603,12 @@ namespace Engine {
 
     // ========== Framebuffer Management ==========
 
-    void Renderer::InitializeFramebuffer(int width, int height) {
-        if (m_framebuffer != 0) {
-            CleanupFramebuffer();
-        }
-
-        m_framebufferWidth = width;
-        m_framebufferHeight = height;
-
-        // Create framebuffer
-        glGenFramebuffers(1, &m_framebuffer);
-        glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
-
-        // Create color texture
-        glGenTextures(1, &m_colorTexture);
-        glBindTexture(GL_TEXTURE_2D, m_colorTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_colorTexture, 0);
-
-        // Create depth texture (useful for shadow mapping later)
-        glGenTextures(1, &m_depthTexture);
-        glBindTexture(GL_TEXTURE_2D, m_depthTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_depthTexture, 0);
-
-        // Check completeness
-        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-            ENGINE_THROW("Framebuffer not complete!");
-        }
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-        // Create screen quad for post-processing
-        CreateScreenQuad();
-    }
-
-    void Renderer::ResizeFramebuffer(int width, int height) {
-        if (width == m_framebufferWidth && height == m_framebufferHeight) return;
-        InitializeFramebuffer(width, height);
-    }
-
-    void Renderer::CleanupFramebuffer() {
-        if (m_colorTexture) glDeleteTextures(1, &m_colorTexture);
-        if (m_depthTexture) glDeleteTextures(1, &m_depthTexture);
-        if (m_framebuffer) glDeleteFramebuffers(1, &m_framebuffer);
-        if (m_screenQuadVAO) glDeleteVertexArrays(1, &m_screenQuadVAO);
-        if (m_screenQuadVBO) glDeleteBuffers(1, &m_screenQuadVBO);
-
-        m_colorTexture = 0;
-        m_depthTexture = 0;
-        m_framebuffer = 0;
-        m_screenQuadVAO = 0;
-        m_screenQuadVBO = 0;
-    }
-
     void Renderer::CreateScreenQuad() {
-        float quadVertices[] = {
-            // positions   // texCoords
+        // positions (clip space) + uv
+        static constexpr float quadVertices[] = {
             -1.0f,  1.0f,  0.0f, 1.0f,
             -1.0f, -1.0f,  0.0f, 0.0f,
              1.0f, -1.0f,  1.0f, 0.0f,
-
             -1.0f,  1.0f,  0.0f, 1.0f,
              1.0f, -1.0f,  1.0f, 0.0f,
              1.0f,  1.0f,  1.0f, 1.0f
@@ -447,38 +616,108 @@ namespace Engine {
 
         glGenVertexArrays(1, &m_screenQuadVAO);
         glGenBuffers(1, &m_screenQuadVBO);
+
         glBindVertexArray(m_screenQuadVAO);
         glBindBuffer(GL_ARRAY_BUFFER, m_screenQuadVBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
-        glEnableVertexAttribArray(0);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+
+        // attribute 0 = position (vec2)
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(1);
+        glEnableVertexAttribArray(0);
+
+        // attribute 1 = uv (vec2)
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+
         glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
 
     void Renderer::BeginFramebufferPass() {
-        glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
+        // glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
+        m_Framebuffer->Bind();
+        // glEnable(GL_FRAMEBUFFER_SRGB);
+
+        // Clear this framebuffer
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        Window& window = Application::Get().GetWindow();
+        /*if (m_framebufferWidth != window.GetWidth() || m_framebufferHeight != window.GetHeight())
+            ResizeFramebuffer(window.GetWidth(), window.GetHeight());*/
+        // glViewport managed outside
     }
 
     void Renderer::EndFramebufferPass() {
-        // Bind default framebuffer and render the color texture to screen
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glDisable(GL_DEPTH_TEST);
+        PERF_BEGIN("Render_PostProcess");
+        RunPostProcessPipeline();
+        PERF_END("Render_PostProcess");
 
-        // TODO: Use a post-process shader here
-        // For now, just blit the texture to screen
-        // You'll need a simple passthrough shader for this
+        glBindVertexArray(0);
+        glEnable(GL_DEPTH_TEST);
+    }
+
+    void Renderer::RunPostProcessPipeline() {
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_BLEND);
+
+        // Scene output
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_Framebuffer->GetColorAttachment(0)->id);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, m_Framebuffer->GetDepthAttachment()->id);
+
+        //// Bloom
+        // 1. Bright-pass (extract bright areas)
+        m_brightPassShader->Enable(); // *global* Shader for extracting bright pixels
+        m_brightPassShader->SetUniform("uSceneTexture", 0);
+        m_brightPassShader->SetUniform("uThreshold", RendererConfig.BrightnessThreshold); // Brightness threshold
+
+        // glBindFramebuffer(GL_FRAMEBUFFER, m_brightPassFBO); // *global* FBO for bright-pass output
+        m_postProcessBrightFBO->Bind();
+        glClear(GL_COLOR_BUFFER_BIT);
 
         glBindVertexArray(m_screenQuadVAO);
-        glBindTexture(GL_TEXTURE_2D, m_colorTexture);
-        // shader->Enable();
-        // shader->SetUniform("screenTexture", 0);
         glDrawArrays(GL_TRIANGLES, 0, 6);
-        glBindVertexArray(0);
 
-        glEnable(GL_DEPTH_TEST);
+        // 2. Blur (ping-pong between two FBOs for multiple passes)
+        bool horizontal = true;
+        int blurPasses = 10; // Number of blur iterations (5 horizontal + 5 vertical)
+
+        m_blurShader->Enable(); // *global* Shader for Gaussian blur
+
+        for (int i = 0; i < blurPasses; i++) {
+            // glBindFramebuffer(GL_FRAMEBUFFER, m_bloomPingPongFbos[horizontal ? 1 : 0]); // *global* Two FBOs for ping-pong blur
+            m_postProcessPongFBO[horizontal ? 1 : 0]->Bind();
+            m_blurShader->SetUniform("uHorizontal", horizontal ? 1 : 0);
+
+            // First pass reads from bright-pass, rest read from previous blur
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, i == 0 ? m_postProcessBrightFBO->GetColorAttachment(0)->id : m_postProcessPongFBO[horizontal ? 0 : 1]->GetColorAttachment(0)->id); // *global* Textures attached to ping-pong FBOs
+            m_blurShader->SetUniform("uTexture", 0);
+
+            glBindVertexArray(m_screenQuadVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+
+            horizontal = !horizontal;
+        }
+
+        // Final composite (blend original scene with bloom)
+        m_postProcessingShader->Enable();
+        m_postProcessingShader->SetUniform("uSceneTexture", 0); // Original scene
+        m_postProcessingShader->SetUniform("uBloomTexture", 1); // Blurred bright areas
+        m_postProcessingShader->SetUniform("uBloomStrength", RendererConfig.BloomStrength); // Bloom intensity
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_Framebuffer->GetColorAttachment()->id);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, m_postProcessPongFBO[!horizontal ? 1 : 0]->GetColorAttachment(0)->id); // Final blurred result
+        // glBindTexture(GL_TEXTURE_2D, m_brightPassTexture);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDisable(GL_DEPTH_TEST);
+
+        glBindVertexArray(m_screenQuadVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
     }
 
     // ========== Frustum Culling ==========
