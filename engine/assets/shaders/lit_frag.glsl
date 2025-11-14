@@ -14,6 +14,8 @@ struct Material {
     vec3 specularColor;
     float shininess;
     float opacity;
+    float emmisiveIntensity;
+    vec3 emmisiveColor;
 };
 
 uniform Material uMaterial;
@@ -40,6 +42,8 @@ void main() {
     float spec = pow(max(dot(norm, halfwayDir), 0.0), uMaterial.shininess);
     vec3 specular = spec * uLightColor * uMaterial.specularColor;
     
-    vec3 result = ambient + diffuse + specular;
+    vec3 lighting =  ambient + diffuse + specular;
+    vec3 emmision = uMaterial.emmisiveIntensity * uMaterial.emmisiveColor;
+    vec3 result = lighting + emmision;
     FragColor = vec4(result, uMaterial.opacity);
 }

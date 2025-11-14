@@ -49,6 +49,7 @@ namespace Engine {
 		// Store 'this' pointer for callback retrieval
     	glfwSetWindowUserPointer(m_Window, this);
 		glfwSetWindowSizeCallback(m_Window, [](GLFWwindow* window, int width, int height) {
+			if (width == 0 || height == 0) return; // We do not respect such tomfoolery
 			auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
 			if (self) self->Resize(width, height);
 		});

@@ -5,7 +5,7 @@
 #include <algorithm>
 
 constexpr static struct {
-    float BloomStrength = 0.8f;
+    float BloomStrength = 1.2f;
     float BrightnessThreshold = 1.0f;
 } RendererConfig;
 
@@ -472,8 +472,8 @@ namespace Engine {
 
     void Renderer::SetLightUniforms(Shader* shader) {
         shader->SetUniform("uLightPos", vec3(30, 100, 0));
-        // shader->SetUniform("uLightColor", vec3(0.19f, 0.19f, 0.64f)); // moonlight color, should be less intense! TODO!
-        shader->SetUniform("uLightColor", vec3(1.0f));
+        shader->SetUniform("uLightColor", vec3(0.19f, 0.19f, 0.64f)); // moonlight color, should be less intense! TODO!
+        // shader->SetUniform("uLightColor", vec3(1.0f));
         // TODO: Light integration
         /*shader->SetUniform("uLightCount", static_cast<int>(m_processedLights.size()));
 
@@ -508,6 +508,8 @@ namespace Engine {
             shader->SetUniform("uMaterial.shininess", material->shininess);
             if (material->isTransparent)
                 shader->SetUniform("uMaterial.opacity", material->opacity);
+            shader->SetUniform("uMaterial.emmisiveIntensity", material->emmisiveIntensity);
+            shader->SetUniform("uMaterial.emmisiveColor", material->emmisiveColor);
         }
         
         // Set textures (only for textured materials)
@@ -521,7 +523,12 @@ namespace Engine {
             if (material->normal && material->normal->id) {
                 shader->SetUniform("uMaterial.normalMap", *material->normal, Shader::TextureSlot::NORMAL);
             }
+            if (material->emmisive && (material->emmisive->id)) {
+                shader->SetUniform("uMaterial.emmisiveMap", *material->emmisive, Shader::TextureSlot::EMMISIVE);
+            }
             shader->SetUniform("uMaterial.shininess", material->shininess);
+            shader->SetUniform("uMaterial.emmisiveIntensity", material->emmisiveIntensity);
+            shader->SetUniform("uMaterial.emmisiveColor", material->emmisiveColor);
         }
     }
 

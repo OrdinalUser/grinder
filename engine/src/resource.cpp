@@ -152,6 +152,10 @@ namespace Engine {
             return Application::Get().GetResourceSystem()->load<Texture>(Application::Get().GetVFS()->GetEngineResourcePath("assets/textures/normal1x1.png"), LoadCfg::Texture{.texFormat=LoadCfg::TextureFormat::RGB});
         }
 
+        std::shared_ptr<Texture> GetDefaultEmmisiveTexture() {
+            return Application::Get().GetResourceSystem()->load<Texture>(Application::Get().GetVFS()->GetEngineResourcePath("assets/textures/black1x1.png"));
+        }
+
         std::shared_ptr<Shader> GetUnlitShader() {
             return Application::Get().GetResourceSystem()->load<Shader>(
                 Application::Get().GetVFS()->GetEngineResourcePath("assets/shaders/unlit")
@@ -544,11 +548,13 @@ namespace Engine {
             auto diffuseTex = loadTexture(mat, aiTextureType_DIFFUSE, oldIdx);
             auto specularTex = loadTexture(mat, aiTextureType_SPECULAR, oldIdx);
             auto normalTex = loadTexture(mat, aiTextureType_NORMALS, oldIdx);
+            auto emmisiveTex = loadTexture(mat, aiTextureType_EMISSIVE, oldIdx);
 
             // Set textures or defaults
             material.diffuse = diffuseTex.value_or(DefaultAssets::GetDefaultColorTexture());
             material.specular = specularTex.value_or(DefaultAssets::GetDefaultColorTexture());
             material.normal = normalTex.value_or(DefaultAssets::GetDefaultNormalTexture());
+            material.emmisive = normalTex.value_or(DefaultAssets::GetDefaultEmmisiveTexture());
 
             // Load material colors
             aiColor3D color;
@@ -563,6 +569,17 @@ namespace Engine {
             if (AI_SUCCESS != mat->Get(AI_MATKEY_SHININESS, shininess) || shininess <= 0.0f)
                 shininess = SHININESS_DEFAULT;
             material.shininess = shininess;
+
+            constexpr float EMMISIVE_INTENSITY_DEFAULT = 0.0f;
+            float emmisiveIntensity = EMMISIVE_INTENSITY_DEFAULT;
+            if (AI_SUCCESS != mat->Get(AI_MATKEY_EMISSIVE_INTENSITY, emmisiveIntensity))
+                emmisiveIntensity = EMMISIVE_INTENSITY_DEFAULT;
+            material.emmisiveIntensity = emmisiveIntensity;
+
+            aiColor3D emmisiveColor{ 0.0f, 0.0f, 0.0f };
+            if (AI_SUCCESS != mat->Get(AI_MATKEY_COLOR_EMISSIVE, emmisiveColor))
+                emmisiveColor = aiColor3D{0.0f, 0.0f, 0.0f };
+            material.emmisiveColor = vec3(emmisiveColor.r, emmisiveColor.g, emmisiveColor.b);
 
             // ========== Determine transparency ==========
             material.isTransparent = false;

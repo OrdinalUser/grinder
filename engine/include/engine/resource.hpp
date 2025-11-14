@@ -21,7 +21,8 @@ namespace Engine {
         enum class TextureSlot {
             DIFFUSE = 0,
             SPECULAR = 1,
-            NORMAL = 2
+            NORMAL = 2,
+            EMMISIVE = 3
         };
 
         unsigned int program = 0;
@@ -77,7 +78,9 @@ namespace Engine {
         glm::vec3 diffuseColor{ 1.0f };
         glm::vec3 specularColor{ 1.0f };
         float shininess = 32.0f;
-        
+        float emmisiveIntensity = 0.0f;
+        glm::vec3 emmisiveColor{ 1.0f };
+
         RenderType renderType;
         bool isTransparent;
         float opacity = 1.0f;
@@ -85,6 +88,7 @@ namespace Engine {
         std::shared_ptr<Texture> diffuse;
         std::shared_ptr<Texture> specular;
         std::shared_ptr<Texture> normal;
+        std::shared_ptr<Texture> emmisive;
 
         std::shared_ptr<Shader> shader = nullptr;
 

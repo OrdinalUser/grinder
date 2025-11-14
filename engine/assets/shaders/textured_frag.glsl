@@ -15,6 +15,9 @@ struct Material {
     sampler2D diffuseMap;
     sampler2D specularMap;
     sampler2D normalMap;
+    sampler2D emmisiveMap;
+    float emmisiveIntensity;
+    vec3 emmisiveColor;
 };
 
 uniform Material uMaterial;
@@ -29,6 +32,7 @@ void main() {
     vec4 texDiffuse = texture(uMaterial.diffuseMap, fs_in.TexCoord);
     vec3 texSpecular = texture(uMaterial.specularMap, fs_in.TexCoord).rgb;
     vec3 texNormal = texture(uMaterial.normalMap, fs_in.TexCoord).rgb;
+    vec3 emmisiveColorTex = texture(uMaterial.emmisiveMap, fs_in.TexCoord).rgb;
     
     // Normal mapping (convert from [0,1] to [-1,1])
     texNormal = normalize(texNormal * 2.0 - 1.0);
@@ -55,7 +59,9 @@ void main() {
     vec3 halfwayDir = normalize(lightDir + viewDir);
     float spec = pow(max(dot(normal, halfwayDir), 0.0), uMaterial.shininess);
     vec3 specular = spec * uLightColor * texSpecular;
-    
-    vec3 result = ambient + diffuse + specular;
+
+    vec3 lighting =  ambient + diffuse + specular;
+    vec3 emmision = (emmisiveColorTex * uMaterial.emmisiveIntensity) + (texDiffuse.rgb * uMaterial.emmisiveColor * uMaterial.emmisiveIntensity);
+    vec3 result = lighting + emmision;
     FragColor = vec4(result, texDiffuse.a);
 }
