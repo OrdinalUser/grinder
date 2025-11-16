@@ -14,141 +14,156 @@
 
 using namespace Engine;
 using namespace Engine::Component;
+#include <chrono>
+
+// Add these classes BEFORE the City class
+
+class Particle {
+public:
+    glm::vec3 position;
+    glm::vec3 velocity;
+    glm::vec3 color;
+    float life;
+    float maxLife;
+    float size;
+    
+    Particle(glm::vec3 pos, glm::vec3 vel, glm::vec3 col, float l, float s)
+        : position(pos), velocity(vel), color(col), life(l), maxLife(l), size(s) {}
+    
+    bool isAlive() const { return life > 0.0f; }
+    
+    void update(float deltaTime) {
+        const float gravity = -9.8f;
+        velocity.y += gravity * deltaTime;
+        position += velocity * deltaTime;
+        life -= deltaTime;
+    }
+};
+
+class ParticleSystem {
+public:
+    std::vector<Particle> particles;
+    Ref<Shader> shader;
+    GLuint vao, vbo, ibo;
+    
+    ParticleSystem() : shader(nullptr), vao(0), vbo(0), ibo(0) {}
+    
+    void init(Ref<Shader> particleShader) {
+        shader = particleShader;
+        
+        // Create a simple cube for particles
+        std::vector<glm::vec3> vertices = {
+            {-0.5f, -0.5f, -0.5f}, {0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, -0.5f}, {-0.5f, 0.5f, -0.5f},
+            {-0.5f, -0.5f, 0.5f}, {0.5f, -0.5f, 0.5f}, {0.5f, 0.5f, 0.5f}, {-0.5f, 0.5f, 0.5f}
+        };
+        
+        std::vector<GLuint> indices = {
+            0,1,2, 2,3,0,  4,5,6, 6,7,4,  0,3,7, 7,4,0,
+            1,5,6, 6,2,1,  3,2,6, 6,7,3,  0,4,5, 5,1,0
+        };
+        
+        glGenVertexArrays(1, &vao);
+        glGenBuffers(1, &vbo);
+        glGenBuffers(1, &ibo);
+        
+        glBindVertexArray(vao);
+        
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        glEnableVertexAttribArray(0);
+        
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+        glBindVertexArray(0);
+    }
+    
+    ~ParticleSystem() {
+        if (ibo) glDeleteBuffers(1, &ibo);
+        if (vbo) glDeleteBuffers(1, &vbo);
+        if (vao) glDeleteVertexArrays(1, &vao);
+    }
+    
+    void explode(glm::vec3 position, int count = 150) {
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        std::uniform_real_distribution<float> velDist(-8.0f, 8.0f);
+        std::uniform_real_distribution<float> upDist(5.0f, 15.0f);
+        std::uniform_real_distribution<float> lifeDist(1.5f, 4.0f);
+        std::uniform_real_distribution<float> sizeDist(0.15f, 0.4f);
+        std::uniform_real_distribution<float> colorDist(0.0f, 0.3f);
+        
+        for (int i = 0; i < count; i++) {
+            glm::vec3 velocity(velDist(gen), upDist(gen), velDist(gen));
+            // Orange color with variations (bright orange to red-orange)
+            glm::vec3 color(1.0f, 0.4f + colorDist(gen), 0.0f + colorDist(gen) * 0.2f);
+            particles.emplace_back(position, velocity, color, lifeDist(gen), sizeDist(gen));
+        }
+    }
+    
+    void update(float deltaTime) {
+        for (auto it = particles.begin(); it != particles.end();) {
+            it->update(deltaTime);
+            if (!it->isAlive()) {
+                it = particles.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    
+    void render(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix = glm::mat4(1.0f)) {
+        if (particles.empty() || !shader) return;
+        shader->Enable();
+        glBindVertexArray(vao);
+
+        // Enable alpha blending for particles
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        // Use engine convention: uProjView = projection * view
+        glm::mat4 projView = projectionMatrix * viewMatrix;
+        shader->SetUniform("uProjView", projView);
+
+        for (const auto& p : particles) {
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), p.position);
+            model = glm::scale(model, glm::vec3(p.size));
+
+            shader->SetUniform("uModel", model);
+
+            // Fade color based on remaining life
+            float alpha = p.life / p.maxLife;
+            glm::vec3 fadedColor = p.color * alpha;
+            shader->SetUniform("uMaterial.diffuseColor", fadedColor);
+            shader->SetUniform("uMaterial.opacity", alpha);
+
+            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+        }
+
+        glDisable(GL_BLEND);
+    }
+};
+
+// Add these global variables after the existing globals (after City city;)
+ParticleSystem particleSystem;
+bool explosionTriggered = false;
+//---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 entity_id car = null, camera = null, big_H = null, small_H = null, grass = null, road = null, pummp = null,
-truck = null, police = null, firetruck = null, city_parent = null, tree = null, car2= null;
+truck = null, police = null, firetruck = null, city_parent = null, tree = null,car2=null;
 Camera* camComp = nullptr;
 Ref<ECS> ecs;
 Ref<VFS> vfs;
-class Cube {
-public:
-    // Cube vertices (corner points)
-    std::vector<glm::vec3> vertices = {
-        {-1,   -1,   -1},   // 0 - bottom left front
-        {1, -1,   -1},   // 1 - bottom right front
-        {1, 1, -1},   // 2 - top right front
-        {-1,   1, -1},   // 3 - top left front
-        {-1,   -1,   1}, // 4 - bottom left back
-        {1, -1,   1}, // 5 - bottom right back
-        {1, 1, 1}, // 6 - top right back
-        {-1,   1, 1}  // 7 - top left back
-    };
 
-    // Structure representing a triangular face
-    struct Face {
-        GLuint v0, v1, v2;
-    };
-
-    // Cube faces (each face has 2 triangles)
-    std::vector<Face> indices = {
-        // Front face (z = 0)
-        {0, 1, 2}, {2, 3, 0},
-
-        // Back face (z = 0.1)
-        {4, 5, 6}, {6, 7, 4},
-
-        // Left face (x = 0)
-        {0, 3, 7}, {7, 4, 0},
-
-        // Right face (x = 0.1)
-        {1, 5, 6}, {6, 2, 1},
-
-        // Top face (y = 0.1)
-        {3, 2, 6}, {6, 7, 3},
-
-        // Bottom face (y = 0)
-        {0, 4, 5}, {5, 1, 0}
-    };
-    // Program to associate with the object
-    Ref<Shader> shader;
-
-    // These will hold the data and object buffers
-    GLuint vao, vbo, cbo, ibo;
-    glm::mat4 modelMatrix{ 1.0f };
-
-public:
-    // Public attributes that define position, color ..
-    glm::vec3 position{ 0,0,0 };
-    glm::vec3 rotation{ 0,0,0 };
-    glm::vec3 scale{ 1,1,1 };
-    glm::vec3 color{ 1,0,0 };
-
-
-    // Initialize object data buffers
-    Cube() : shader(nullptr) {
-    }
-    // Clean up
-    ~Cube() {
-        // Delete data from OpenGL
-        glDeleteBuffers(1, &ibo);
-        glDeleteBuffers(1, &cbo);
-        glDeleteBuffers(1, &vbo);
-        glDeleteVertexArrays(1, &vao);
-    }
-
-    void init() {
-        glGenVertexArrays(1, &vao);
-        glBindVertexArray(vao);
-
-        // Positions
-        glGenBuffers(1, &vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
-
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-        glEnableVertexAttribArray(0);
-
-        // Indices (flatten faces into raw indices)
-        std::vector<GLuint> flatIndices;
-        flatIndices.reserve(indices.size() * 3);
-        for (const auto& f : indices) {
-            flatIndices.push_back(f.v0);
-            flatIndices.push_back(f.v1);
-            flatIndices.push_back(f.v2);
-        }
-
-        glGenBuffers(1, &ibo);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, flatIndices.size() * sizeof(GLuint), flatIndices.data(), GL_STATIC_DRAW);
-
-        // Projection matrix setup
-        glm::mat4 projection = glm::perspective(glm::radians(60.0f), 1.0f, 0.1f, 100.0f);
-        shader->Enable();
-        shader->SetUniform("ProjectionMatrix", projection);
-
-        // Default view and model
-        auto mat = glm::mat4(1.0f);
-        shader->SetUniform("ViewMatrix", mat);
-        shader->SetUniform("ModelMatrix", mat);
-    }
-
-    // Set the object transformation matrix
-    void updateModelMatrix(glm::mat4 parent_matrix = glm::mat4(1.0f)) {
-        // Compute transformation by scaling, rotating and then translating the shape
-
-        glm::mat4 T = glm::translate(glm::mat4(1.0f), position);
-        glm::mat4 R = glm::rotate(glm::mat4(1.0f), rotation.z, glm::vec3{ 0,1,0 });
-        glm::mat4 S = glm::scale(glm::mat4(1.0f), scale);
-
-        modelMatrix = parent_matrix * T * R * S;
-
-    }
-
-    // Draw polygons
-    void render(glm::mat4& viewMatrix) {
-        // Update GPU uniforms
-        shader->Enable();
-        shader->SetUniform("ModelMatrix", modelMatrix);
-        shader->SetUniform("ViewMatrix", viewMatrix);
-        shader->SetUniform("OverallColor", color);
-
-        glBindVertexArray(vao);
-        glDrawElements(GL_TRIANGLES, (GLsizei)(indices.size() * 3), GL_UNSIGNED_INT, 0);
-    }
-};
 class City {
 public:
-    std::vector<std::unique_ptr<Cube>> objects;
+    
     Ref<Shader> shader = nullptr;
     // Optional 3D model buildings (loaded from assets)
     Ref<Model> bigModel1 = nullptr;
@@ -252,8 +267,11 @@ public:
                     static std::mt19937 gen(rd());
                     std::uniform_int_distribution<> dis(2, 3);
                     // Optionally scale the model to roughly cover 3x3 tiles
-                    ref.SetScale({ tileSize / 1.1,dis(gen),tileSize / 1.1 });
-
+                    ref.SetScale({ tileSize / 1.0,dis(gen),tileSize / 1.0 });
+                    entity_id i = ecs->Instantiate(null, Component::Transform(), cross);
+                    auto ref1 = ecs->GetTransformRef(i);
+                    ref1.SetPosition({ worldX, 0.0f, worldZ });
+                    ref1.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
 
                     continue;
                 }
@@ -262,8 +280,11 @@ public:
                     entity_id e = ecs->Instantiate(city_parent, Component::Transform(), bigModel4);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
-                    ref.SetScale({ (tileSize / 2.0f), 0.75f,  (tileSize / 2.0f) });
-
+                    ref.SetScale({ (tileSize / 1.5f), 0.75f,  (tileSize / 1.5f) });
+                    entity_id i = ecs->Instantiate(null, Component::Transform(), cross);
+                    auto ref1 = ecs->GetTransformRef(i);
+                    ref1.SetPosition({ worldX, 0.0f, worldZ });
+                    ref1.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
 
                     continue;
                 }
@@ -286,7 +307,7 @@ public:
                     entity_id e = ecs->Instantiate(city_parent, Component::Transform(), roadModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
-                    ref.SetScale({ tileSize / 2.0f, 1.0f, tileSize / 2.0f });
+                    ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
                     continue;
                 }
                 else if (tile == 6 && roadModel) {
@@ -295,7 +316,7 @@ public:
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetRotation(glm::angleAxis(-1.5708f, glm::vec3(0.0f, 1.0f, 0.0f)));
-                    ref.SetScale({ tileSize / 2.0f, 1.0f, tileSize / 2.0f });
+                    ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
                     continue;
                 }
                 else if (tile == 8 && cross) {
@@ -303,7 +324,7 @@ public:
                     entity_id e = ecs->Instantiate(city_parent, Component::Transform(), cross);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
-                    ref.SetScale({ tileSize/2.0f, 1.0f, tileSize/2.0f});
+                    ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
                     continue;
                 }
                 else if (tile == 3 && pummpModel) {
@@ -320,6 +341,10 @@ public:
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({ (tileSize / 2.0f), 1.0f, (tileSize / 2.0f) });
+                    entity_id i = ecs->Instantiate(null, Component::Transform(), cross);
+                    auto ref1 = ecs->GetTransformRef(i);
+                    ref1.SetPosition({ worldX, 0.0f, worldZ });
+                    ref1.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
                     continue;
                 }
                 else if (tile == 7 && roadModel) {
@@ -327,72 +352,18 @@ public:
                     entity_id e = ecs->Instantiate(city_parent, Component::Transform(), roadModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
-                    ref.SetScale({ tileSize / 2.0f, 1.0f, tileSize / 2.0f });
-                    // ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
-                    // ref.SetScale({ tileSize, 1.0f, tileSize });
+                    ref.SetScale({ (tileSize / 2.0f), 0.05f,  (tileSize / 2.0f) });
 
                     std::cout << worldX << "|" << worldZ << std::endl;
                     continue;
                     Log::info("{} {}", worldX, worldZ);
                 }
-                // Fallback: create cube for other tiles
-                auto obj = std::make_unique<Cube>();
-                obj->shader = shader;
-                obj->init();
-                if (tile == 5) {
-                    obj->position = { worldX, 0.1f, worldZ };
-                    obj->scale = { tileSize / 2.0f,  1.0f, tileSize / 2.0f };
-                    obj->color = { 0.8,0.6,0.4 };
-                }
-                else if (tile == 3) {
-                    // Gas pump
-                    obj->position = { worldX, 0.75f, worldZ };
-                    obj->scale = { tileSize / 2.0f, 0.75f, tileSize / 2.0f };
-                    obj->color = { 1.0f, 0.8f, 0.0f };
-                }
-                else if (tile == 1) {
-                    // Big Building
-                    obj->position = { worldX, 0.0f, worldZ };  // y = half height to sit on ground
-                    obj->scale = { tileSize / 2.0f, tileSize / 2.0f, tileSize / 2.0f };
-                    obj->color = { 0.6,0.6,0.6 };//{colorDist(gen), colorDist(gen) * 0.8f, colorDist(gen) * 0.9f};
-                }
-                else if (tile == 2) {
-                    // Small house
-                    obj->position = { worldX, 2.0f, worldZ };  // y = half height
-                    obj->scale = { tileSize / 2.0f, 2.0f, tileSize / 2.0f };
-                    obj->color = { 0.1,0.3,0.9 };//{colorDist(gen), colorDist(gen) * 0.8f, colorDist(gen) * 0.9f};
-                }
-                else if (tile == 4) {
-                    // Grass
-                    obj->position = { worldX, 0.025f, worldZ };
-                    obj->scale = { tileSize / 2.0f, 0.025f, tileSize / 2.0f };
-                    obj->color = { 0.0f, 0.8f, 0.0f };
-                }
-                else if (tile == 0) {
-                    // Road
-                    obj->position = { worldX, 0.01f, worldZ };
-                    obj->scale = { tileSize / 2.0f, 0.01f, tileSize / 2.0f };
-                    obj->color = { 0.3f, 0.3f, 0.3f };
-                }
-                else if (tile == 7) {
-                    obj->position = { worldX, 0.01f, worldZ };
-                    obj->scale = { tileSize / 2.0f, 0.01f, tileSize / 2.0f };
-                    obj->color = { 0.3f, 0.3f, 0.3f };
-                    std::cout << worldX << "|" << worldZ << std::endl;
-                }
-                else continue;
-
-                obj->updateModelMatrix();
-                objects.push_back(std::move(obj));
-                count++;
+               
             }
         }
     }
 
-    void render(glm::mat4& viewMatrix) {
-        for (auto& o : objects)
-            o->render(viewMatrix);
-    }
+    
 };
 
 Ref<Shader> shader = nullptr;
@@ -423,10 +394,10 @@ enum cameraMode {
 static cameraMode camMode = TRACKING;
 static CarState carState = MOVE_LEFT;
 static float carYaw = 0.0f; // radians
-static float carSpeed = 4.0f; // world units per second
+static float carSpeed = 7.0f; // world units per second
 auto spinAngle = 0.0f;
-extern "C" {
 
+extern "C" {
     void scene_init(scene_data_t scene_data) {
 
         // Scene preamble
@@ -461,15 +432,15 @@ extern "C" {
         Ref<Model> modelpolice = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Police Car.glb"));
         police = ecs->Instantiate(null, Component::Transform(), modelpolice);
         auto policeT = ecs->GetTransformRef(police);
-        policeT.SetPosition({ 8.0f, 0.0f, 9.0f });
-        policeT.SetScale({ 0.25f,0.25f,0.25f });
+        policeT.SetPosition({ 8.0f, 0.05f, 9.0f });
+        policeT.SetScale({ 0.3f,0.3f,0.3f });
         policeT.SetRotation(glm::angleAxis(2*1.5708f, glm::vec3({ 0,1,0 })));
 
         Ref<Model> model_car2 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/red_car.glb"));
         car2 = ecs->Instantiate(null, Component::Transform(), model_car2);
         auto car2T = ecs->GetTransformRef(car2);
-        car2T.SetPosition({ 8.0f,0.05f,8.0f });
-        car2T.SetScale({ 0.25f,0.25f,0.25f });
+        car2T.SetPosition({ 8.0f,0.1f,7.0f });
+        car2T.SetScale({ 0.5f,0.5f,0.5f });
 
         //policeT.SetRotation(glm::angleAxis(1.5708f, glm::vec3({ 0,1,0 })));
     // Load building models (if present) and assign to city
@@ -510,11 +481,20 @@ extern "C" {
         city.shader = shader;
         city.initializeModels();
         city.generate();
+        // Initialize particle system with an unlit shader from engine assets
+        try {
+            Ref<Shader> particleShader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/unlit"));
+            particleSystem.init(particleShader);
+        }
+        catch (...) {
+            Log::warn("Failed to load particle shader; particles will be disabled");
+        }
     }
 
 
     void scene_update(float deltaTime) {
         // Get car transform
+        //auto deltaTime = (float)glfwGetTime();
         auto carTransform = ecs->GetTransformRef(car);
         glm::vec3 carPos = carTransform.GetPosition();
         glm::quat carRot = carTransform.GetRotation();
@@ -626,15 +606,14 @@ extern "C" {
         // Rotate car wheels
         constexpr float WHEEL_ROTATION_SPEED = 5.0f;
 
-
+        glm::vec3 pos = carTransform.GetPosition();
+        // polpos already declared above and used by camera logic
         // Car movement state machine
-        {
-            glm::vec3 pos = carTransform.GetPosition();
-            glm::vec3 polpos = policeT.GetPosition();
+        
+
             switch (carState) {
             case MOVE_LEFT:
                 pos.x -= carSpeed * deltaTime;
-
                 if (pos.x < -11.5f) {
                     pos.x = -11.5f;
                     carState = FIRST_TURN;
@@ -668,15 +647,14 @@ extern "C" {
                 if (pos.x >= 2.0f) {
                     carState = STOPPED;
                     pos.x = 2.0f;
-                    //camMode = SPIN;
                 }
                 break;
             case STOPPED:
-                polpos.z -= 4.0f * deltaTime;
+                polpos.z -= carSpeed * deltaTime;
                 carYaw = -1.5708f;
-                car2Pos.z-=4.0f*deltaTime;
+                car2Pos.z-=carSpeed*deltaTime;
                 camMode = ASCEND;
-                if (polpos.z < -15) {
+                if (car2Pos.z < -15) {
                     polpos.z = -15;
                     carState = STOP_SECOND;
                     camMode = TRACK_ESCAPING;
@@ -684,29 +662,43 @@ extern "C" {
                 }
                 break;
             case STOP_SECOND:
-                car2Pos.x -= 2.0f*deltaTime;
-                car2Pos.z -= 2.0f*deltaTime;
                 carYaw2 = 1.5708f / 2;
-                if (car2Pos.z < -18.75) {
+                car2Pos.x -= carSpeed * deltaTime;
+                car2Pos.z -= carSpeed * deltaTime;
+                if (car2Pos.z < -18.5) {
+                   camMode = SPIN;
+                    
+
                     carState = CRASH;
-                    car2Pos.z = -18.75;
                 }
                 break;
             case CRASH:
-                carYaw2= 1.5708f / 2;
+                carYaw2 = 1.5708f / 2;
+            //std::cout << "boom" << std::endl;
+                if (!explosionTriggered) {
+                    auto truckT = ecs->GetTransformRef(truck);
+                    glm::vec3 truckPos = truckT.GetPosition();
+                    particleSystem.explode(truckPos, 150);
+                    explosionTriggered = true;
+                }
                 break;
-                
-            }
-            car2T.SetRotation(glm::angleAxis(carYaw2, glm::vec3({ 0,1,0 })));
-            car2T.SetPosition(car2Pos);
-            policeT.SetPosition(polpos);
-            carTransform.SetPosition(pos);
-            carTransform.SetRotation(glm::angleAxis(carYaw, glm::vec3(0.0f, 1.0f, 0.0f)));
-            }
 
-            // Apply updated transforms back to ECS components so changes take effect
+            }
+        
 
-        }
+        // Apply transforms after state machine so updates run every frame
+        car2T.SetPosition(car2Pos);
+        car2T.SetRotation(glm::angleAxis(carYaw2, glm::vec3(0.0f, 1.0f, 0.0f)));
+        policeT.SetPosition(polpos);
+        carTransform.SetPosition(pos);
+        carTransform.SetRotation(glm::angleAxis(carYaw, glm::vec3(0.0f, 1.0f, 0.0f)));
+
+        // Update particle system each frame so particles move/life decreases
+        particleSystem.update(deltaTime);
+
+        // Debug: print positions and state so we can see movement values in console
+        
+    }
 
     void scene_render() {
         city.shader->Enable();
@@ -715,7 +707,9 @@ extern "C" {
         glm::mat4 viewMatrix = camComp->viewMatrix;
 
         // Render city with the camera's view matrix
-        city.render(viewMatrix);
+        //city.render(viewMatrix);
+        // Use the camera's projection matrix so particles use the same projection as the renderer
+        particleSystem.render(viewMatrix, camComp->projectionMatrix);
     }
 
     void scene_shutdown() {
