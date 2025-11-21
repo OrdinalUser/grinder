@@ -10,143 +10,183 @@
 #include <engine/types.hpp>
 #include <engine/application.hpp>
 #include <engine/ecs.hpp>
+#include <engine/Tween.hpp>
+#include <engine/Easing.hpp>
 #include <random>
 
 using namespace Engine;
 using namespace Engine::Component;
 #include <chrono>
-
-// Add these classes BEFORE the City class
-
-class Particle {
+class FireModelExplosion {
 public:
-    glm::vec3 position;
-    glm::vec3 velocity;
-    glm::vec3 color;
-    float life;
-    float maxLife;
-    float size;
+    struct FireInstance {
+        entity_id entityId;
+        glm::vec3 velocity;
+        float life;
+        float maxLife;
+        
+        FireInstance(entity_id id, glm::vec3 vel, float l) 
+            : entityId(id), velocity(vel), life(l), maxLife(l) {}
+        
+        bool isAlive() const { return life > 0.0f; }
+    };
     
-    Particle(glm::vec3 pos, glm::vec3 vel, glm::vec3 col, float l, float s)
-        : position(pos), velocity(vel), color(col), life(l), maxLife(l), size(s) {}
+    std::vector<FireInstance> fireParticles;
+    Ref<Model> fireModel;
+    Ref<ECS> ecsRef;
+    bool hasExploded;
+    bool isFountain;               // Enable continuous spawning mode
+    glm::vec3 fountainPosition;    // Where to spawn new particles
+    float spawnTimer;              // Timer for continuous spawning
+    float spawnInterval;           // Seconds between spawn batches
+    int particlesPerBatch;         // How many particles to spawn per batch
     
-    bool isAlive() const { return life > 0.0f; }
+    FireModelExplosion() : fireModel(nullptr), ecsRef(nullptr), hasExploded(false), 
+                           isFountain(false), fountainPosition(0.0f), spawnTimer(0.0f),
+                           spawnInterval(0.05f), particlesPerBatch(3) {}
+    
+    void init(Ref<Model> model, Ref<ECS> ecs) {
+        fireModel = model;
+        ecsRef = ecs;
+    }
+    
+    void explode(glm::vec3 position, int count = 100) {
+        // Clean up old particles
+        cleanup();
+        isFountain = false;  // Disable fountain mode
+        
+        hasExploded = true;
+        
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        std::uniform_real_distribution<float> velDist(-8.0f, 8.0f);   // Random XZ velocity
+        std::uniform_real_distribution<float> upDist(5.0f, 15.0f);    // Strong upward velocity
+        std::uniform_real_distribution<float> lifeDist(1.5f, 4.0f);   // Particle lifetime
+        
+        for (int i = 0; i < count; i++) {
+            // Create random velocity in all directions (spherical explosion)
+            glm::vec3 velocity(velDist(gen), upDist(gen), velDist(gen));
+            
+            // Instantiate fire.glb model at explosion position
+            entity_id fireEntity = ecsRef->Instantiate(null, Component::Transform(), fireModel);
+            auto fireTransform = ecsRef->GetTransformRef(fireEntity);
+            fireTransform.SetPosition(position);
+            fireTransform.SetScale(glm::vec3(0.5f, 0.5f, 0.5f)); // Adjust scale as needed
+            
+            // Store instance with its velocity
+            fireParticles.emplace_back(fireEntity, velocity, lifeDist(gen));
+        }
+        
+        Log::info("Fire explosion created with {} fire.glb instances at position ({}, {}, {})", 
+                  count, position.x, position.y, position.z);
+    }
+
+    // Start fountain mode: continuously spawn particles in an upward cone
+    void startFountain(glm::vec3 position, float interval = 0.01f, int particlesPerBatch = 3) {
+        cleanup();  // Clear old particles
+        isFountain = true;
+        fountainPosition = position;
+        spawnInterval = interval;
+        particlesPerBatch = particlesPerBatch;
+        spawnTimer = 0.0f;
+        hasExploded = true;
+    }
+
+    // Stop fountain mode
+    void stopFountain() {
+        isFountain = false;
+    }
     
     void update(float deltaTime) {
         const float gravity = -9.8f;
-        velocity.y += gravity * deltaTime;
-        position += velocity * deltaTime;
-        life -= deltaTime;
-    }
-};
-
-class ParticleSystem {
-public:
-    std::vector<Particle> particles;
-    Ref<Shader> shader;
-    GLuint vao, vbo, ibo;
-    
-    ParticleSystem() : shader(nullptr), vao(0), vbo(0), ibo(0) {}
-    
-    void init(Ref<Shader> particleShader) {
-        shader = particleShader;
         
-        // Create a simple cube for particles
-        std::vector<glm::vec3> vertices = {
-            {-0.5f, -0.5f, -0.5f}, {0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, -0.5f}, {-0.5f, 0.5f, -0.5f},
-            {-0.5f, -0.5f, 0.5f}, {0.5f, -0.5f, 0.5f}, {0.5f, 0.5f, 0.5f}, {-0.5f, 0.5f, 0.5f}
-        };
-        
-        std::vector<GLuint> indices = {
-            0,1,2, 2,3,0,  4,5,6, 6,7,4,  0,3,7, 7,4,0,
-            1,5,6, 6,2,1,  3,2,6, 6,7,3,  0,4,5, 5,1,0
-        };
-        
-        glGenVertexArrays(1, &vao);
-        glGenBuffers(1, &vbo);
-        glGenBuffers(1, &ibo);
-        
-        glBindVertexArray(vao);
-        
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-        glEnableVertexAttribArray(0);
-        
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
-        glBindVertexArray(0);
-    }
-    
-    ~ParticleSystem() {
-        if (ibo) glDeleteBuffers(1, &ibo);
-        if (vbo) glDeleteBuffers(1, &vbo);
-        if (vao) glDeleteVertexArrays(1, &vao);
-    }
-    
-    void explode(glm::vec3 position, int count = 150) {
-        static std::random_device rd;
-        static std::mt19937 gen(rd());
-        std::uniform_real_distribution<float> velDist(-8.0f, 8.0f);
-        std::uniform_real_distribution<float> upDist(5.0f, 15.0f);
-        std::uniform_real_distribution<float> lifeDist(1.5f, 4.0f);
-        std::uniform_real_distribution<float> sizeDist(0.15f, 0.4f);
-        std::uniform_real_distribution<float> colorDist(0.0f, 0.3f);
-        
-        for (int i = 0; i < count; i++) {
-            glm::vec3 velocity(velDist(gen), upDist(gen), velDist(gen));
-            // Orange color with variations (bright orange to red-orange)
-            glm::vec3 color(1.0f, 0.4f + colorDist(gen), 0.0f + colorDist(gen) * 0.2f);
-            particles.emplace_back(position, velocity, color, lifeDist(gen), sizeDist(gen));
+        // In fountain mode, spawn new particles continuously
+        if (isFountain) {
+            spawnTimer += deltaTime;
+            while (spawnTimer >= spawnInterval) {
+                spawnTimer -= spawnInterval;
+                spawnFountainBatch();
+            }
         }
-    }
-    
-    void update(float deltaTime) {
-        for (auto it = particles.begin(); it != particles.end();) {
-            it->update(deltaTime);
+        
+        // Update all fire particles
+        for (auto it = fireParticles.begin(); it != fireParticles.end();) {
+            // Decrease life first
+            it->life -= deltaTime;
+            
+            // Check if particle is dead before trying to access its transform
             if (!it->isAlive()) {
-                it = particles.erase(it);
-            } else {
+                ecsRef->DestroyEntity(it->entityId);
+                it = fireParticles.erase(it);
+                continue;
+            }
+            
+            // Apply gravity
+            it->velocity.y += gravity * deltaTime;
+            
+            // Get transform and update position (only if alive)
+            try {
+                auto fireTransform = ecsRef->GetTransformRef(it->entityId);
+                glm::vec3 currentPos = fireTransform.GetPosition();
+                currentPos += it->velocity * deltaTime;
+                fireTransform.SetPosition(currentPos);
                 ++it;
+            }
+            catch (...) {
+                // If entity is invalid, remove from list
+                it = fireParticles.erase(it);
             }
         }
     }
-    
-    void render(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix = glm::mat4(1.0f)) {
-        if (particles.empty() || !shader) return;
-        shader->Enable();
-        glBindVertexArray(vao);
 
-        // Enable alpha blending for particles
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        // Use engine convention: uProjView = projection * view
-        glm::mat4 projView = projectionMatrix * viewMatrix;
-        shader->SetUniform("uProjView", projView);
-
-        for (const auto& p : particles) {
-            glm::mat4 model = glm::translate(glm::mat4(1.0f), p.position);
-            model = glm::scale(model, glm::vec3(p.size));
-
-            shader->SetUniform("uModel", model);
-
-            // Fade color based on remaining life
-            float alpha = p.life / p.maxLife;
-            glm::vec3 fadedColor = p.color * alpha;
-            shader->SetUniform("uMaterial.diffuseColor", fadedColor);
-            shader->SetUniform("uMaterial.opacity", alpha);
-
-            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+private:
+    // Helper: spawn a batch of fountain particles
+    void spawnFountainBatch() {
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        std::uniform_real_distribution<float> velDist(-3.0f, 3.0f);   // Small random XZ spread
+        std::uniform_real_distribution<float> upDist(8.0f, 12.0f);    // Upward velocity for fountain
+        std::uniform_real_distribution<float> lifeDist(2.0f, 3.5f);   // Particle lifetime
+        
+        for (int i = 0; i < particlesPerBatch; i++) {
+            // Create cone-shaped upward velocity (mostly up, some sideways spread)
+            glm::vec3 velocity(velDist(gen), upDist(gen), velDist(gen));
+            
+            // Instantiate fire.glb model at fountain position
+            entity_id fireEntity = ecsRef->Instantiate(null, Component::Transform(), fireModel);
+            auto fireTransform = ecsRef->GetTransformRef(fireEntity);
+            fireTransform.SetPosition(fountainPosition);
+            fireTransform.SetScale(glm::vec3(0.5f, 0.5f, 0.5f));
+            
+            // Store instance with its velocity
+            fireParticles.emplace_back(fireEntity, velocity, lifeDist(gen));
         }
+    }
 
-        glDisable(GL_BLEND);
+public:
+    
+    void cleanup() {
+        // Destroy all existing fire entities safely
+        for (auto& fp : fireParticles) {
+            hasExploded = false;
+            try {
+                ecsRef->DestroyEntity(fp.entityId);
+            }
+            catch (...) {
+                //Entity may already be destroyed; silently skip
+            }
+        }
+        fireParticles.clear();
+    }
+    
+    void reset() {
+        cleanup();
+        hasExploded = false;
     }
 };
+// Add these classes BEFORE the City class
+//---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-// Add these global variables after the existing globals (after City city;)
-ParticleSystem particleSystem;
-bool explosionTriggered = false;
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -156,7 +196,7 @@ bool explosionTriggered = false;
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 entity_id car = null, camera = null, big_H = null, small_H = null, grass = null, road = null, pummp = null,
-truck = null, police = null, firetruck = null, city_parent = null, tree = null,car2=null;
+truck = null, police = null, firetruck = null, city_parent = null, tree = null,car2=null,fire=null;
 Camera* camComp = nullptr;
 Ref<ECS> ecs;
 Ref<VFS> vfs;
@@ -369,6 +409,62 @@ public:
 Ref<Shader> shader = nullptr;
 City city;
 
+// Car animation/tween helper
+class CarAnimator {
+public:
+    struct TweenState {
+        Transform startTransform;
+        Transform endTransform;
+        float duration;
+        float elapsed;
+        Easing::Func easing;
+        bool isActive;
+        
+        TweenState() : duration(0), elapsed(0), easing(Easing::Linear), isActive(false) {}
+    };
+    
+    TweenState tweenState;
+    
+    void animateTo(const Transform& currentTransform, const Transform& target, float duration, Easing::Func easing = Easing::OutCubic) {
+        // Vždy použi aktuálnu pozíciu ako štart
+        tweenState.startTransform = tweenState.isActive ? tweenState.endTransform : currentTransform;
+        tweenState.endTransform = target;
+        tweenState.duration = duration;
+        tweenState.elapsed = 0.0f;
+        tweenState.easing = easing;
+        tweenState.isActive = true;
+    }
+    
+    Transform update(const Transform& currentTransform, float deltaTime) {
+        if (!tweenState.isActive) {
+            startTransform = currentTransform;  // ← Aktualizuj startTransform
+            return currentTransform;
+        }
+
+        tweenState.elapsed += deltaTime;
+        float t = glm::clamp(tweenState.elapsed / tweenState.duration, 0.0f, 1.0f);
+
+        Transform result = Engine::Tween::Interpolate(
+            tweenState.startTransform,
+            tweenState.endTransform,
+            t,
+            tweenState.easing
+        );
+
+        if (tweenState.elapsed >= tweenState.duration) {
+            tweenState.isActive = false;
+            startTransform = tweenState.endTransform;  // ← Ulož poslednú pozíciu
+        }
+
+        return result;
+    }
+    
+    bool isAnimating() const { return tweenState.isActive; }
+    
+private:
+    Transform startTransform;
+};
+
 // Smooth camera tracking variables
 static glm::vec3 smoothCamPos = glm::vec3(0, 0, 0);
 static float smoothCarRotation = 0.0f;
@@ -394,8 +490,10 @@ enum cameraMode {
 static cameraMode camMode = TRACKING;
 static CarState carState = MOVE_LEFT;
 static float carYaw = 0.0f; // radians
-static float carSpeed = 7.0f; // world units per second
+static float carSpeed = 4.0f; // world units per second
 auto spinAngle = 0.0f;
+FireModelExplosion fireExplosion;//aaaaaaaaaaaaaaaa
+CarAnimator carAnimator;
 
 extern "C" {
     void scene_init(scene_data_t scene_data) {
@@ -406,7 +504,7 @@ extern "C" {
         vfs = app.GetVFS();
         Ref<ResourceSystem> rs = app.GetResourceSystem();
         auto module_name = string(scene_data.module_name);
-
+       
         shader = rs->load<Shader>(vfs->Resolve(module_name, "assets/color"));
         city_parent = ecs->CreateEntity3D(null, Component::Transform(), "CityParent");
         // Setup camera
@@ -419,16 +517,19 @@ extern "C" {
         Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/car_expo.glb"));
         car = ecs->Instantiate(null, Component::Transform(), model);
         auto carT = ecs->GetTransformRef(car);
-        carT.SetPosition({ 20,0.0f,22.5 });
+        carT.SetPosition({ 20.0f,0.0f,22.5f });
         carT.SetRotation(glm::angleAxis(1.5708f, glm::vec3({ 0,1,0 })));
         carT.SetScale(glm::vec3(0.5, 0.5, 0.5));
-
+    
         Ref<Model> model1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/tank.glb"));
         truck = ecs->Instantiate(null, Component::Transform(), model1);
         auto truckT = ecs->GetTransformRef(truck);
         truckT.SetPosition({ 5.0f, 0.0f, -19.0f });
         truckT.SetScale({ 0.25f,0.25f,0.25f });
 
+        Ref<Model> model_fire = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/fire.glb"));
+        fire = ecs->Instantiate(null, Component::Transform(), model_fire);
+        
         Ref<Model> modelpolice = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Police Car.glb"));
         police = ecs->Instantiate(null, Component::Transform(), modelpolice);
         auto policeT = ecs->GetTransformRef(police);
@@ -477,22 +578,20 @@ extern "C" {
         Ref<Model> tree = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/tree.glb"), LoadCfg::Model{ .static_mesh = true });
         city.trees = tree;
         // Create parent entity for all city objects
-
+        
+        fireExplosion.init(model_fire, ecs);
         city.shader = shader;
         city.initializeModels();
         city.generate();
+
         // Initialize particle system with an unlit shader from engine assets
-        try {
-            Ref<Shader> particleShader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/unlit"));
-            particleSystem.init(particleShader);
-        }
-        catch (...) {
-            Log::warn("Failed to load particle shader; particles will be disabled");
-        }
+
     }
 
 
     void scene_update(float deltaTime) {
+        
+        fireExplosion.update(deltaTime);
         // Get car transform
         //auto deltaTime = (float)glfwGetTime();
         auto carTransform = ecs->GetTransformRef(car);
@@ -501,7 +600,8 @@ extern "C" {
 
         auto car2T = ecs->GetTransformRef(car2);
         glm::vec3 car2Pos = car2T.GetPosition();
-
+       // auto fireT = ecs->GetTransformRef(fire);
+       // glm::vec3 firepos = fireT.GetPosition();
         auto policeT = ecs->GetTransformRef(police);
         glm::vec3 polpos = policeT.GetPosition();
         // Extract car's Y-axis rotation (yaw)
@@ -607,94 +707,152 @@ extern "C" {
         constexpr float WHEEL_ROTATION_SPEED = 5.0f;
 
         glm::vec3 pos = carTransform.GetPosition();
+        
         // polpos already declared above and used by camera logic
-        // Car movement state machine
+        // Car movement state machine with tweened animations
         
 
-            switch (carState) {
-            case MOVE_LEFT:
-                pos.x -= carSpeed * deltaTime;
-                if (pos.x < -11.5f) {
-                    pos.x = -11.5f;
-                    carState = FIRST_TURN;
-                }
-                break;
-            case FIRST_TURN:
-                carYaw -= 0.02f;
-                if (carYaw < 0.0f) {
-                    carYaw = 0.0f;
-                    carState = MOVING_FORWARD;
-                }
-                break;
-            case MOVING_FORWARD:
-                camMode = CAMERA_FOLLOW;
-                pos.z -= carSpeed * deltaTime;
-                carYaw = 0.0f;
-                if (pos.z <= -16.5f) {
-                    carState = TURNING;
-                    pos.z = -16.5f; // Snap to exact position
-                }
-                break;
-            case TURNING:
-                carYaw -= 0.02f;
-                if (carYaw < -1.5708f) {
-                    carState = TURNING_RIGHT;
-                    carYaw = -1.5708f; // -90 degrees
-                }
-                break;
-            case TURNING_RIGHT:
-                pos.x += carSpeed * deltaTime;
-                if (pos.x >= 2.0f) {
-                    carState = STOPPED;
-                    pos.x = 2.0f;
-                }
-                break;
-            case STOPPED:
-                polpos.z -= carSpeed * deltaTime;
-                carYaw = -1.5708f;
-                car2Pos.z-=carSpeed*deltaTime;
-                camMode = ASCEND;
-                if (car2Pos.z < -15) {
-                    polpos.z = -15;
-                    carState = STOP_SECOND;
-                    camMode = TRACK_ESCAPING;
+            // Nájdi túto časť v scene_update a nahraď ju:
+      //  std::cout << pos.x << "||" << pos.z << std::endl;
+switch (carState) {
+    case MOVE_LEFT:
+        if (!carAnimator.isAnimating()) {
+            Transform current;
+            current.position = carTransform.GetPosition();
+            current.rotation = carTransform.GetRotation();
+            current.scale = carTransform.GetScale();
 
-                }
-                break;
-            case STOP_SECOND:
-                carYaw2 = 1.5708f / 2;
-                car2Pos.x -= carSpeed * deltaTime;
-                car2Pos.z -= carSpeed * deltaTime;
-                if (car2Pos.z < -18.5) {
-                   camMode = SPIN;
-                    
+            Transform target;
+            target.position = glm::vec3(-11.5f, pos.y, pos.z);
+            target.rotation = glm::angleAxis(1.5708f, glm::vec3(0.0f, 1.0f, 0.0f));
+            target.scale = glm::vec3(0.5f, 0.5f, 0.5f);
 
-                    carState = CRASH;
-                }
-                break;
-            case CRASH:
-                carYaw2 = 1.5708f / 2;
-            //std::cout << "boom" << std::endl;
-                if (!explosionTriggered) {
-                    auto truckT = ecs->GetTransformRef(truck);
-                    glm::vec3 truckPos = truckT.GetPosition();
-                    particleSystem.explode(truckPos, 150);
-                    explosionTriggered = true;
-                }
-                break;
-
-            }
+            carAnimator.animateTo(current, target, 4.0f, Easing::InOutQuad);  // ← Pridaj current
+            carState = FIRST_TURN;
+        }
+        
+        break;
+    case FIRST_TURN:
+        if (!carAnimator.isAnimating()) {
+            // Rotation animation
+            Transform current;
+            current.position = carTransform.GetPosition();
+            current.rotation = carTransform.GetRotation();
+            current.scale = carTransform.GetScale();
+            Transform target;
+            target.position = glm::vec3(-12.0f, pos.y, 20);
+            target.rotation = glm::angleAxis(0.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+            target.scale = glm::vec3(0.5f, 0.5f, 0.5f);
+            // ZMENENÉ: z 0.5f na 1.5f (pomalšia rotácia)
+            carAnimator.animateTo(current,target, 1.5f, Easing::InOutQuad);
+            carState = MOVING_FORWARD;
+        }
+        break;
+    case MOVING_FORWARD:
+        camMode = CAMERA_FOLLOW;
+        if (!carAnimator.isAnimating()) {
+            Transform target;
+            Transform current;
+            current.position = carTransform.GetPosition();
+            current.rotation = carTransform.GetRotation();
+            current.scale = carTransform.GetScale();
+            target.position = glm::vec3(pos.x, pos.y, -16.5f);
+            target.rotation = glm::angleAxis(0.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+            target.scale = glm::vec3(0.5f, 0.5f, 0.5f);
+            // ZMENENÉ: z 2.0f na 5.0f (pomalší pohyb dopredu)
+            carAnimator.animateTo(current, target, 10.0f, Easing::InOutQuad);
+            carState = TURNING;
+        }
+        break;
+    case TURNING:
+        if (!carAnimator.isAnimating()) {
+            // Rotate 90 degrees
+            Transform target;
+            Transform current;
+            current.position = carTransform.GetPosition();
+            current.rotation = carTransform.GetRotation();
+            current.scale = carTransform.GetScale();
+            target.position = glm::vec3(-10.0f, pos.y, -17.0f);
+            target.rotation = glm::angleAxis(-1.5708f, glm::vec3(0.0f, 1.0f, 0.0f));
+            target.scale = glm::vec3(0.5f, 0.5f, 0.5f);
+            // ZMENENÉ: z 0.5f na 1.5f (pomalšia rotácia)
+            carAnimator.animateTo(current, target, 1.5f, Easing::InOutQuad);
+            carState = TURNING_RIGHT;
+        }
+        break;
+    case TURNING_RIGHT:
+        if (!carAnimator.isAnimating()) {
+            Transform target;
+            Transform current;
+            current.position = carTransform.GetPosition();
+            current.rotation = carTransform.GetRotation();
+            current.scale = carTransform.GetScale();
+            target.position = glm::vec3(2.0f, pos.y, pos.z);
+            target.rotation = glm::angleAxis(-1.5708f, glm::vec3(0.0f, 1.0f, 0.0f));
+            target.scale = glm::vec3(0.5f, 0.5f, 0.5f);
+            // ZMENENÉ: z 1.5f na 4.0f (pomalší pohyb doprava)
+            carAnimator.animateTo(current, target, 4.0f, Easing::InOutQuad);
+            
+        }
+        if (pos.x == 2) {
+            carState = STOPPED;
+        }
+        break;
+    case STOPPED:
+        // ZMENENÉ: zmenšená rýchlosť polície a car2 (z 2*carSpeed na 1.5*carSpeed)
+        polpos.z -= 1.5f * carSpeed * deltaTime;
+        car2Pos.z -= 1.5f * carSpeed * deltaTime;
+        camMode = ASCEND;
+        if (car2Pos.z < -15) {
+            polpos.z = -15;
+            carState = STOP_SECOND;
+            camMode = TRACK_ESCAPING;
+        }
+        break;
+    case STOP_SECOND:
+        carYaw2 = 1.5708f / 2;
+        // ZMENENÉ: zmenšená rýchlosť (z carSpeed na 0.7*carSpeed)
+        car2Pos.x -= 0.7f * carSpeed * deltaTime;
+        car2Pos.z -= 0.7f * carSpeed * deltaTime;
+        if (car2Pos.z < -18.5) {
+            camMode = SPIN;
+            carState = CRASH;
+        }
+        break;
+    case CRASH:
+        carYaw2 = 1.5708f / 2;
+        if (!fireExplosion.hasExploded) {
+            glm::vec3 explosionPos = glm::vec3(5.0f, 0.5f, -19.0f);
+            fireExplosion.startFountain(explosionPos, 0.005f, 50);
+        }
+        break;
+}
         
 
         // Apply transforms after state machine so updates run every frame
+       // fireT.SetPosition(firepos);
         car2T.SetPosition(car2Pos);
         car2T.SetRotation(glm::angleAxis(carYaw2, glm::vec3(0.0f, 1.0f, 0.0f)));
         policeT.SetPosition(polpos);
-        carTransform.SetPosition(pos);
-        carTransform.SetRotation(glm::angleAxis(carYaw, glm::vec3(0.0f, 1.0f, 0.0f)));
+        
+        // Get current car transform
+        Transform currentCarTransform;
+        currentCarTransform.position = carTransform.GetPosition();
+        currentCarTransform.rotation = carTransform.GetRotation();
+        currentCarTransform.scale = carTransform.GetScale();
+            Transform currentTransform;
+            currentTransform.position = carTransform.GetPosition();
+            currentTransform.rotation = carTransform.GetRotation();
+            currentTransform.scale = carTransform.GetScale();
+            
+            Transform animatedTransform = carAnimator.update(currentTransform, deltaTime);
+            carTransform.SetPosition(animatedTransform.position);
+            carTransform.SetRotation(animatedTransform.rotation);
+            carTransform.SetScale(animatedTransform.scale);
+       
 
         // Update particle system each frame so particles move/life decreases
-        particleSystem.update(deltaTime);
+       
 
         // Debug: print positions and state so we can see movement values in console
         
@@ -707,9 +865,8 @@ extern "C" {
         glm::mat4 viewMatrix = camComp->viewMatrix;
 
         // Render city with the camera's view matrix
-        //city.render(viewMatrix);
         // Use the camera's projection matrix so particles use the same projection as the renderer
-        particleSystem.render(viewMatrix, camComp->projectionMatrix);
+   
     }
 
     void scene_shutdown() {
