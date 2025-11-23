@@ -547,16 +547,16 @@ extern "C" {
         Ref<Model> model_firetruck1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Fire Truck.glb"));
         fire_truck1 = ecs->Instantiate(null, Component::Transform(), model_firetruck1);
         auto Ft1 = ecs->GetTransformRef(fire_truck1);
-        Ft1.SetPosition({ -4.0f,0.5f,-31.0f });
+        Ft1.SetPosition({ -4.0f, 0.0f, -31.0f });           // ← was 0.0f → keep 0.0f (already good)
         Ft1.SetScale({ 1.5f,1.5f,1.5f });
         Ft1.SetRotation(glm::angleAxis(-1.5708f, glm::vec3({ 0,1,0 })));
 
         Ref<Model> model_firetruck2 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Fire Truck.glb"));
         fire_truck2 = ecs->Instantiate(null, Component::Transform(), model_firetruck2);
         auto Ft2 = ecs->GetTransformRef(fire_truck2);
-        Ft2.SetPosition({ 20.0f,0.5f,-15.0f });
+        Ft2.SetPosition({ 20.0f, 0.0f, -15.0f });           // ← change from 0.0f → still 0.0f (or was 0.0f already)
         Ft2.SetScale({ 1.5f,1.5f,1.5f });
-        Ft2.SetRotation(glm::angleAxis(-1.5708f*2, glm::vec3({ 0,1,0 })));
+        Ft2.SetRotation(glm::angleAxis(-1.5708f * 2, glm::vec3({ 0,1,0 })));
         //policeT.SetRotation(glm::angleAxis(1.5708f, glm::vec3({ 0,1,0 })));
     // Load building models (if present) and assign to city
 
@@ -620,8 +620,8 @@ extern "C" {
         glm::vec3 polpos = policeT.GetPosition();
 
         // --- Persistent state for fire trucks ---
-        static glm::vec3 F1pos = glm::vec3(-4.0f, 0.5f, -31.0f);
-        static glm::vec3 F2pos = glm::vec3(20.0f, 0.5f, -15.0f);
+        static glm::vec3 F1pos = glm::vec3(-4.0f, 0.0f, -31.0f);   // ← change 0.5f → 0.0f
+        static glm::vec3 F2pos = glm::vec3(20.0f, 0.0f, -15.0f);   // ← change 0.5f → 0.0f
         static float F1yaw = -1.5708f;        // facing +Z (north)
         static float F2yaw = -3.14159f;        // facing -Z (south) = 180°
 
@@ -831,9 +831,9 @@ switch (carState) {
         break;
     case CRASH:
         
-        if (F1pos.z < -17.0f) {
+        if (F1pos.z < -16.0f) {
             F1pos.z += carSpeed * 1.2f * deltaTime;
-            if (F1pos.z > -17.0f) F1pos.z = -17.0f;
+            if (F1pos.z > -16.0f) F1pos.z = -16.0f;
         }
 
         // FT2 comes from right (x = 20 → 10), then will turn later
@@ -848,7 +848,7 @@ switch (carState) {
         }
 
         // Both arrived → start turning
-        if (F1pos.z >= -17.0f && F2pos.x <= 10.0f) {
+        if (F1pos.z >= -16.0f && F2pos.x <= 10.0f) {
             carState = FIRE_TRUCK_TURN;
         }
         break;
@@ -883,13 +883,13 @@ switch (carState) {
         const float moveSpeed = carSpeed * 0.9f;
 
         // FT1 moves right to x = 2
-        if (F1pos.x < 2.0f) {
+        if (F1pos.x < 4.0f) {
             F1pos.x += moveSpeed * deltaTime;
-            if (F1pos.x > 2.0f) F1pos.x = 2.0f;
+            if (F1pos.x > 4.0f) F1pos.x = 4.0f;
         }
 
         // FT2 moves diagonally left + down to (8, 0.5, -15)
-        glm::vec3 target2(6.0f, 0.5f, -17.0f);
+        glm::vec3 target2(6.0f, 0.0f, -17.0f);
         glm::vec3 dir = target2 - F2pos;
         if (glm::length(dir) > 0.1f) {
             dir = glm::normalize(dir);
@@ -899,26 +899,24 @@ switch (carState) {
             F2pos = target2;
         }
 
-        if (F1pos.x >= 2.0f && glm::distance(F2pos, target2) < 0.5f) {
-            F1pos = glm::vec3(2.0f, 0.5f, -17.0f);
+        if (F1pos.x >= 4.0f && glm::distance(F2pos, target2) < 0.5f) {
+            F1pos = glm::vec3(4.0f, 0.0f, -19.0f);
             F2pos = target2;
             F1yaw = 0.0f;
             F2yaw = -2.35619f;
             carState = FIRE_TRUCK_STOP;
-            camMode = SPIN;
             spinAngle = 0.0f;
         }
         break;
     }
 
     case FIRE_TRUCK_STOP:
-        // Final locked positions – heroic stance in front of the burning tanker
-        // Final pose
-        F1pos = glm::vec3(2.0f, 0.5f, -17.0f);
-        F2pos = glm::vec3(6.0f, 0.5f, -17.0f);
+
+        F1pos = glm::vec3(2.0f, 0.0f, -16.0f);
+        F2pos = glm::vec3(6.0f, 0.0f, -17.0f);
         F1yaw = 0.0f;
-        F2yaw = glm::radians(-225.0f); // -135°
-        break;
+        F2yaw = glm::radians(-225.0f); 
+      
         break;
 }
         
