@@ -1,12 +1,9 @@
-// Car demo
-
 #include <iostream>
 #include <engine/scene_api.hpp>
 #include <engine/exception.hpp>
 #include <engine/log.hpp>
 #include <engine/vfs.hpp>
 #include <engine/resource.hpp>
-
 #include <engine/types.hpp>
 #include <engine/application.hpp>
 #include <engine/ecs.hpp>
@@ -17,6 +14,7 @@
 using namespace Engine;
 using namespace Engine::Component;
 #include <chrono>
+
 class FireModelExplosion {
 public:
     struct FireInstance {
@@ -196,7 +194,7 @@ public:
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 entity_id car = null, camera = null, big_H = null, small_H = null, grass = null, road = null, pummp = null,
-truck = null, police = null, firetruck = null, city_parent = null, tree = null,car2=null,fire=null;
+truck = null, police = null, firetruck = null, city_parent = null, tree = null,car2=null,fire=null,fire_truck1 = null, fire_truck2=null;
 Camera* camComp = nullptr;
 Ref<ECS> ecs;
 Ref<VFS> vfs;
@@ -250,7 +248,7 @@ public:
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 0, 3, 0, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 0, 0, 0, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 5, 5, 8, 8, 4, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
-            {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 8, 6, 6, 6, 6, 6, 8, 8, 1, 1, 0, 2, 2, 0, 4, 4, 4},
+            {2, 0, 2, 4, 2, 0, 2, 4, 1, 8, 6, 6, 6, 8, 6, 6, 6, 6, 6, 8, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 4, 4, 4, 4, 0, 8, 6, 6, 8, 6, 6, 8, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 1, 1, 0, 2, 2, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 4, 1, 0, 2, 2, 0, 4, 4, 4},
@@ -478,6 +476,9 @@ enum CarState {
     STOPPED,
     STOP_SECOND,
     CRASH,
+    FIRE_TRUCK_TURN,
+    FIRE_TRUCK_MOVE_TO_PUMP,
+    FIRE_TRUCK_STOP
 };
 enum cameraMode {
     CAMERA_FOLLOW,
@@ -543,6 +544,19 @@ extern "C" {
         car2T.SetPosition({ 8.0f,0.1f,7.0f });
         car2T.SetScale({ 0.5f,0.5f,0.5f });
 
+        Ref<Model> model_firetruck1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Fire Truck.glb"));
+        fire_truck1 = ecs->Instantiate(null, Component::Transform(), model_firetruck1);
+        auto Ft1 = ecs->GetTransformRef(fire_truck1);
+        Ft1.SetPosition({ -4.0f,0.5f,-31.0f });
+        Ft1.SetScale({ 1.5f,1.5f,1.5f });
+        Ft1.SetRotation(glm::angleAxis(-1.5708f, glm::vec3({ 0,1,0 })));
+
+        Ref<Model> model_firetruck2 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Fire Truck.glb"));
+        fire_truck2 = ecs->Instantiate(null, Component::Transform(), model_firetruck2);
+        auto Ft2 = ecs->GetTransformRef(fire_truck2);
+        Ft2.SetPosition({ 20.0f,0.5f,-15.0f });
+        Ft2.SetScale({ 1.5f,1.5f,1.5f });
+        Ft2.SetRotation(glm::angleAxis(-1.5708f*2, glm::vec3({ 0,1,0 })));
         //policeT.SetRotation(glm::angleAxis(1.5708f, glm::vec3({ 0,1,0 })));
     // Load building models (if present) and assign to city
 
@@ -592,23 +606,27 @@ extern "C" {
     void scene_update(float deltaTime) {
         
         fireExplosion.update(deltaTime);
-        // Get car transform
-        //auto deltaTime = (float)glfwGetTime();
+
         auto carTransform = ecs->GetTransformRef(car);
         glm::vec3 carPos = carTransform.GetPosition();
-        glm::quat carRot = carTransform.GetRotation();
+
+        auto FT1 = ecs->GetTransformRef(fire_truck1);
+        auto FT2 = ecs->GetTransformRef(fire_truck2);
 
         auto car2T = ecs->GetTransformRef(car2);
         glm::vec3 car2Pos = car2T.GetPosition();
-       // auto fireT = ecs->GetTransformRef(fire);
-       // glm::vec3 firepos = fireT.GetPosition();
+
         auto policeT = ecs->GetTransformRef(police);
         glm::vec3 polpos = policeT.GetPosition();
-        // Extract car's Y-axis rotation (yaw)
-        glm::vec3 carEuler = glm::eulerAngles(carRot);
-        float carYaw = carEuler.y;
-        float carYaw2 = 0.0f;
-        float y = 0.0f;
+
+        // --- Persistent state for fire trucks ---
+        static glm::vec3 F1pos = glm::vec3(-4.0f, 0.5f, -31.0f);
+        static glm::vec3 F2pos = glm::vec3(20.0f, 0.5f, -15.0f);
+        static float F1yaw = -1.5708f;        // facing +Z (north)
+        static float F2yaw = -3.14159f;        // facing -Z (south) = 180°
+
+        static float carYaw2 = 0.0f;
+
         switch (camMode) {
         case CAMERA_FOLLOW: {
             // Smooth rotation interpolation
@@ -629,14 +647,7 @@ extern "C" {
 
             // Smooth camera position follow
             smoothCamPos = glm::mix(smoothCamPos, targetCamPos, 0.1f);
-
-            // Update camera entity transform
             auto cameraTransform = ecs->GetTransformRef(camera);
-            //cameraTransform.SetPosition(smoothCamPos);
-           // cameraTransform.MoveTowards(targetCamPos,1.0f);
-           // cameraTransform.RotateAround(carPos, 1.0f);
-
-            // Make camera look at car
             camComp->LookAt(targetCamPos, carTransform.Forward() + carPos);
             break;
         }
@@ -660,28 +671,27 @@ extern "C" {
             break;
         }
         case SPIN: {
+            spinAngle += deltaTime * 0.32f;
 
-            // Update spin angle for continuous rotation
-            spinAngle += deltaTime * 0.5f; // Adjust speed by changing multiplier
+            const glm::vec3 spinCenter(5.0f, 0.0f, -18.0f);
+            const float radius = 9.0f;
+            static float height = 4.0f;
 
-            float radius = 12.0f;  // Distance from car
-            float height = 8.0f;   // Height above car
+            height += deltaTime * 1.0f;
+            if (height > 10.0f) height = 10.0f;
 
-            // Calculate camera position in circular orbit
-            glm::vec3 offset = glm::vec3(
+            glm::vec3 offset(
                 cos(spinAngle) * radius,
                 height,
                 sin(spinAngle) * radius
             );
 
-            glm::vec3 spinCamPos = carPos + offset;
+            glm::vec3 spinCamPos = spinCenter + offset;
 
-            // Update camera transform
             auto cameraTransform = ecs->GetTransformRef(camera);
             cameraTransform.SetPosition(spinCamPos);
 
-            // Keep camera looking at car
-            camComp->LookAt(spinCamPos, glm::vec3{ 8,0,-18 });
+            camComp->LookAt(spinCamPos, spinCenter + glm::vec3(0.0f, 3.5f, 0.0f));
             break;
         }
         case TRACK_ESCAPING: {
@@ -746,7 +756,7 @@ switch (carState) {
             // ZMENENÉ: z 0.5f na 1.5f (pomalšia rotácia)
             carAnimator.animateTo(current,target, 1.5f, Easing::InOutQuad);
             carState = MOVING_FORWARD;
-        }
+            }
         break;
     case MOVING_FORWARD:
         camMode = CAMERA_FOLLOW;
@@ -820,42 +830,112 @@ switch (carState) {
         }
         break;
     case CRASH:
-        carYaw2 = 1.5708f / 2;
-        if (!fireExplosion.hasExploded) {
-            glm::vec3 explosionPos = glm::vec3(5.0f, 0.5f, -19.0f);
-            fireExplosion.startFountain(explosionPos, 0.005f, 50);
+        
+        if (F1pos.z < -17.0f) {
+            F1pos.z += carSpeed * 1.2f * deltaTime;
+            if (F1pos.z > -17.0f) F1pos.z = -17.0f;
         }
+
+        // FT2 comes from right (x = 20 → 10), then will turn later
+        if (F2pos.x > 10.0f) {
+            F2pos.x -= carSpeed * 1.2f * deltaTime;
+            if (F2pos.x < 10.0f) F2pos.x = 10.0f;
+        }
+
+        // Start fire
+        if (!fireExplosion.hasExploded) {
+            fireExplosion.startFountain(glm::vec3(5.0f, 0.5f, -19.0f), 0.006f, 50);
+        }
+
+        // Both arrived → start turning
+        if (F1pos.z >= -17.0f && F2pos.x <= 10.0f) {
+            carState = FIRE_TRUCK_TURN;
+        }
+        break;
+
+    case FIRE_TRUCK_TURN:
+    {
+        const float turnSpeed = 1.6f;
+
+        // FT1 (left truck): turn right → from -90° to 0°
+        if (F1yaw < 0.0f) {
+            F1yaw += turnSpeed * deltaTime;
+            if (F1yaw > 0.0f) F1yaw = 0.0f;
+        }
+
+        // FT2 (right truck): turn left + down → from 180° to 135° (-135° or -3π/4)
+        float targetYaw = glm::radians(-225.0f); // -135 degrees
+        if (F2yaw > targetYaw) {
+            F2yaw -= turnSpeed * deltaTime;
+            if (F2yaw < targetYaw) F2yaw = targetYaw;
+        }
+
+        if (F1yaw >= 0.0f && F2yaw <= targetYaw) {
+            F1yaw = 0.0f;
+            F2yaw = targetYaw;
+            carState = FIRE_TRUCK_MOVE_TO_PUMP;
+        }
+        break;
+    }
+
+    case FIRE_TRUCK_MOVE_TO_PUMP:
+    {
+        const float moveSpeed = carSpeed * 0.9f;
+
+        // FT1 moves right to x = 2
+        if (F1pos.x < 2.0f) {
+            F1pos.x += moveSpeed * deltaTime;
+            if (F1pos.x > 2.0f) F1pos.x = 2.0f;
+        }
+
+        // FT2 moves diagonally left + down to (8, 0.5, -15)
+        glm::vec3 target2(6.0f, 0.5f, -17.0f);
+        glm::vec3 dir = target2 - F2pos;
+        if (glm::length(dir) > 0.1f) {
+            dir = glm::normalize(dir);
+            F2pos += dir * moveSpeed * deltaTime;
+        }
+        else {
+            F2pos = target2;
+        }
+
+        if (F1pos.x >= 2.0f && glm::distance(F2pos, target2) < 0.5f) {
+            F1pos = glm::vec3(2.0f, 0.5f, -17.0f);
+            F2pos = target2;
+            F1yaw = 0.0f;
+            F2yaw = -2.35619f;
+            carState = FIRE_TRUCK_STOP;
+            camMode = SPIN;
+            spinAngle = 0.0f;
+        }
+        break;
+    }
+
+    case FIRE_TRUCK_STOP:
+        // Final locked positions – heroic stance in front of the burning tanker
+        // Final pose
+        F1pos = glm::vec3(2.0f, 0.5f, -17.0f);
+        F2pos = glm::vec3(6.0f, 0.5f, -17.0f);
+        F1yaw = 0.0f;
+        F2yaw = glm::radians(-225.0f); // -135°
+        break;
         break;
 }
         
+    Transform carCurrent = { carTransform.GetPosition(), carTransform.GetRotation(), carTransform.GetScale() };
+    Transform animated = carAnimator.update(carCurrent, deltaTime);
+    carTransform.SetPosition(animated.position);
+    carTransform.SetRotation(animated.rotation);
 
-        // Apply transforms after state machine so updates run every frame
-       // fireT.SetPosition(firepos);
-        car2T.SetPosition(car2Pos);
-        car2T.SetRotation(glm::angleAxis(carYaw2, glm::vec3(0.0f, 1.0f, 0.0f)));
-        policeT.SetPosition(polpos);
-        
-        // Get current car transform
-        Transform currentCarTransform;
-        currentCarTransform.position = carTransform.GetPosition();
-        currentCarTransform.rotation = carTransform.GetRotation();
-        currentCarTransform.scale = carTransform.GetScale();
-            Transform currentTransform;
-            currentTransform.position = carTransform.GetPosition();
-            currentTransform.rotation = carTransform.GetRotation();
-            currentTransform.scale = carTransform.GetScale();
-            
-            Transform animatedTransform = carAnimator.update(currentTransform, deltaTime);
-            carTransform.SetPosition(animatedTransform.position);
-            carTransform.SetRotation(animatedTransform.rotation);
-            carTransform.SetScale(animatedTransform.scale);
-       
+    FT1.SetPosition(F1pos);
+    FT1.SetRotation(glm::angleAxis(F1yaw, glm::vec3(0, 1, 0)));
 
-        // Update particle system each frame so particles move/life decreases
-       
+    FT2.SetPosition(F2pos);
+    FT2.SetRotation(glm::angleAxis(F2yaw, glm::vec3(0, 1, 0)));
 
-        // Debug: print positions and state so we can see movement values in console
-        
+    car2T.SetPosition(car2Pos);
+    car2T.SetRotation(glm::angleAxis(carYaw2, glm::vec3(0, 1, 0)));
+    policeT.SetPosition(polpos);
     }
 
     void scene_render() {
