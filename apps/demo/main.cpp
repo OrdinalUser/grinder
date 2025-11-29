@@ -13,6 +13,85 @@
 using namespace Engine;
 using namespace Engine::Component;
 #include <chrono>
+#pragma once
+float globalTime = 0.0f;
+class RainParticles {
+public:
+    struct Drop {
+        entity_id entity;
+        glm::vec3 velocity;
+    };
+
+    std::vector<Drop> drops;
+    uint32_t maxDrops = 20000;   // klidně zvyš (5k–10k později)
+
+    ECS* ecs = nullptr;
+    Ref<Model> raindropModel;
+
+    static inline std::mt19937 rng{ std::random_device{}() };
+
+    void init(ECS* ecs_, Ref<Model> model) {
+        ecs = ecs_;
+        raindropModel = model;
+    }
+
+    void spawnOnce(const glm::vec3& camPos) {
+        drops.reserve(maxDrops);
+
+        std::uniform_real_distribution<float> dx(-40.f, 40.f);
+        std::uniform_real_distribution<float> dz(-40.f, 40.f);
+        std::uniform_real_distribution<float> vy(-35.f, -25.f);
+
+        for (uint32_t i = 0; i < maxDrops; ++i) {
+            Component::Transform tr;
+            tr.position = {
+                camPos.x + dx(rng),
+                camPos.y + 30.f,
+                camPos.z + dz(rng)
+            };
+            tr.scale = glm::vec3(0.03f);
+
+            entity_id e = ecs->Instantiate(
+                null,     // no parent
+                tr,
+                raindropModel
+            );
+
+            drops.push_back({
+                e,
+                { 0.f, vy(rng), 0.f }
+                });
+        }
+    }
+    void update(float dt, const glm::vec3& camPos) {
+        std::uniform_real_distribution<float> dx(-40.f, 40.f);
+        std::uniform_real_distribution<float> dz(-40.f, 40.f);
+
+        for (auto& d : drops) {
+            auto& tr = ecs->GetComponent<Component::Transform>(d.entity);
+            tr.position += d.velocity * dt;
+
+            // recycle under camera
+            if (tr.position.y < camPos.y - 5.f) {
+                tr.position = {
+                    camPos.x + dx(rng),
+                    camPos.y + 30.f,
+                    camPos.z + dz(rng)
+                };
+            }
+        }
+    }
+
+    void shutdown() {
+        for (auto& d : drops) {
+            ecs->DestroyEntity(d.entity);
+        }
+        drops.clear();
+        raindropModel.reset();
+        ecs = nullptr;
+    }
+};
+//--------------------------------------------------------------------------------------------------------
 class FireModelExplosion {
 public:
     struct FireInstance {
@@ -189,23 +268,17 @@ public:
     Ref<Shader> shader = nullptr;
     // Optional 3D model buildings (loaded from assets)
     Ref<Model> bigModel1 = nullptr;
-    Ref<Model> bigModel2 = nullptr;
+   
     Ref<Model> bigModel3 = nullptr;
     Ref<Model> bigModel4 = nullptr;
     Ref<Model> trees = nullptr;
-    Ref<Model> smallModel = nullptr;
+    
     Ref<Model> grassModel = nullptr;
     Ref<Model> roadModel = nullptr;
     Ref<Model> cross = nullptr;
     Ref<Model> pummpModel = nullptr;
-    std::vector<Ref<Model>> bigModels;
-    // Manually adding items to the array
-    void initializeModels() {
-        bigModels.push_back(bigModel1);
-        bigModels.push_back(bigModel2);
-        bigModels.push_back(bigModel3);
-        bigModels.push_back(bigModel4);
-    }
+    
+    
     Ref<Model> randomChoice(const std::vector<Ref<Model>>& models) {
         if (models.empty()) {
             return nullptr;
@@ -271,7 +344,7 @@ public:
                 // If we have 3x3 building models loaded, place them and mark surrounding tiles as occupied (-1)
                 if (tile == 1 && bigModel1) {
                     // Instantiate big building model centered on this tile, occupying 3x3
-                    Ref<Model> bigModel = randomChoice(bigModels);
+                    
                     entity_id e = ecs->Instantiate(city_parent, Component::Transform(), bigModel1);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
@@ -373,6 +446,7 @@ public:
 };
 Ref<Shader> shader = nullptr;
 City city;
+
 class Animator {
 public:
     struct Keyframe {
@@ -619,6 +693,8 @@ Animator car2Animator;
 Animator fire1Anim;
 Animator fire2Anim;
 Animator cameraAnim;
+RainParticles rain;
+
 extern "C" {
     void setupPoliceAndCar2Animation();
     void setupCar2CrashAnimation();
@@ -763,14 +839,15 @@ extern "C" {
    
     void scene_update(float deltaTime) {
         fireExplosion.update(deltaTime);
-
+        globalTime += deltaTime;
+       
         auto carTransform = ecs->GetTransformRef(car);
         auto policeT = ecs->GetTransformRef(police);
         auto car2T = ecs->GetTransformRef(car2);
         auto FT1 = ecs->GetTransformRef(fire_truck1);
         auto FT2 = ecs->GetTransformRef(fire_truck2);
         auto cameraTransform = ecs->GetTransformRef(camera);
-        
+        rain.update(deltaTime, cameraTransform.GetPosition());
 
         // Update all animators
         Transform carCurrent = { carTransform.GetPosition(), carTransform.GetRotation(), carTransform.GetScale() };
@@ -888,7 +965,7 @@ extern "C" {
             camComp->LookAt(trackingPos, policeT.GetPosition());
         }
         }
-        
+       
     }
 
     // 1. CAR ANIMATION - The main sequence starter
@@ -1149,6 +1226,7 @@ extern "C" {
     }
     void scene_init(scene_data_t scene_data) {
         // Scene preamble
+        
         Application& app = Application::Get();
         ecs = app.GetECS();
         vfs = app.GetVFS();
@@ -1204,8 +1282,6 @@ extern "C" {
      
         Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H1.glb"), LoadCfg::Model{ .static_mesh = true });
         city.bigModel1 = cityModel;
-        Ref<Model> cityModel1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H2.glb"), LoadCfg::Model{ .static_mesh = true });
-        city.bigModel2 = cityModel1;
         Ref<Model> cityModel2 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H3.glb"), LoadCfg::Model{ .static_mesh = true });
         city.bigModel3 = cityModel2;
         Ref<Model> cityModel3 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H4.glb"), LoadCfg::Model{ .static_mesh = true });
@@ -1216,17 +1292,21 @@ extern "C" {
         city.roadModel = road;
         Ref<Model> road1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/cross.glb"));
         city.cross = road1;
-        Ref<Model> small_H = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/small_b.glb"), LoadCfg::Model{ .static_mesh = true });
-        city.smallModel = small_H;
         Ref<Model> pummp = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/gas_pump.glb"), LoadCfg::Model{ .static_mesh = true });
         city.pummpModel = pummp;
         Ref<Model> tree = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/tree.glb"), LoadCfg::Model{ .static_mesh = true });
         city.trees = tree;
-        // Create parent entity for all city objects
-   
+        Ref<VFS> vfs = Application::Get().GetVFS(); 
+    
+        auto raindropModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/raindrop.glb"));
+        auto cameraTransform = ecs->GetTransformRef(camera);
+        rain.init(ecs.get(), raindropModel);
+        rain.spawnOnce(cameraTransform.GetPosition());
+
+        
         fireExplosion.init(model_fire, ecs);
         city.shader = shader;
-        city.initializeModels();
+    
         city.generate();
         setupCameraIntroAnimation();
         
@@ -1235,8 +1315,11 @@ extern "C" {
     void scene_render() {
         city.shader->Enable();
         glm::mat4 viewMatrix = camComp->viewMatrix;
+        auto camC = ecs->GetTransformRef(camera);
+
     }
     void scene_shutdown() {
+        rain.shutdown();
     }
     void scene_update_fixed(float deltaTime) {
         return;
