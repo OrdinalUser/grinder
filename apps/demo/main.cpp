@@ -10,6 +10,7 @@
 #include <engine/Tween.hpp>
 #include <engine/Easing.hpp>
 #include <random>
+
 using namespace Engine;
 using namespace Engine::Component;
 #include <chrono>
@@ -20,80 +21,198 @@ public:
     struct Drop {
         entity_id entity;
         glm::vec3 velocity;
+        glm::vec3 lastPosition; // Track position changes
+         
     };
 
     std::vector<Drop> drops;
-    uint32_t maxDrops = 20000;   // klidně zvyš (5k–10k později)
+    uint32_t maxDrops = 10000;  // REDUCED for easier debugging
 
     ECS* ecs = nullptr;
     Ref<Model> raindropModel;
 
-    static inline std::mt19937 rng{ std::random_device{}() };
+    static std::mt19937 rng;
+
+    // City bounds
+    static constexpr float CITY_MIN_X = -30.0f;
+    static constexpr float CITY_MAX_X = 28.0f;
+    static constexpr float CITY_MIN_Z = -35.0f;
+    static constexpr float CITY_MAX_Z = 33.0f;
+    static constexpr float SPAWN_HEIGHT = 50.0f;
+    static constexpr float GROUND_LEVEL = 0.0f;
 
     void init(ECS* ecs_, Ref<Model> model) {
         ecs = ecs_;
         raindropModel = model;
+        
+        if (!ecs) {
+            Log::error("RainParticles: ECS is null!");
+        }
+        if (!raindropModel) {
+            Log::error("RainParticles: raindropModel is null!");
+        }
+        else {
+            Log::info("RainParticles: Model loaded successfully");
+        }
     }
 
-    void spawnOnce(const glm::vec3& camPos) {
+    void spawnOnce() {
+        if (!ecs) {
+            Log::error("RainParticles: Cannot spawn - ECS is null!");
+            return;
+        }
+        if (!raindropModel) {
+            Log::error("RainParticles: Cannot spawn - raindropModel is null!");
+            return;
+        }
         drops.reserve(maxDrops);
+        // Random distributions for city coverage
+        std::uniform_real_distribution<float> dx(CITY_MIN_X, CITY_MAX_X);
+        std::uniform_real_distribution<float> dz(CITY_MIN_Z, CITY_MAX_Z);
+        std::uniform_real_distribution<float> dy(10.f, SPAWN_HEIGHT); // Start higher
+        std::uniform_real_distribution<float> vy(-45.f, -30.f);
 
-        std::uniform_real_distribution<float> dx(-40.f, 40.f);
-        std::uniform_real_distribution<float> dz(-40.f, 40.f);
-        std::uniform_real_distribution<float> vy(-35.f, -25.f);
+        int successCount = 0;
+        int failCount = 0;
 
         for (uint32_t i = 0; i < maxDrops; ++i) {
             Component::Transform tr;
-            tr.position = {
-                camPos.x + dx(rng),
-                camPos.y + 30.f,
-                camPos.z + dz(rng)
+            glm::vec3 spawnPos = {
+                dx(rng),
+                dy(rng),
+                dz(rng)
             };
-            tr.scale = glm::vec3(0.03f);
 
-            entity_id e = ecs->Instantiate(
-                null,     // no parent
-                tr,
-                raindropModel
-            );
+            tr.position = spawnPos;
+            tr.scale = glm::vec3(0.3f); // BIGGER for visibility
 
-            drops.push_back({
-                e,
-                { 0.f, vy(rng), 0.f }
-                });
-        }
-    }
-    void update(float dt, const glm::vec3& camPos) {
-        std::uniform_real_distribution<float> dx(-40.f, 40.f);
-        std::uniform_real_distribution<float> dz(-40.f, 40.f);
+            if (i < 3) {
+                Log::info("RainParticles: Spawning particle {} at ({:.2f}, {:.2f}, {:.2f})",
+                    i, tr.position.x, tr.position.y, tr.position.z);
+            }
 
-        for (auto& d : drops) {
-            auto& tr = ecs->GetComponent<Component::Transform>(d.entity);
-            tr.position += d.velocity * dt;
+            try {
+                entity_id e = ecs->Instantiate(null, tr, raindropModel);
 
-            // recycle under camera
-            if (tr.position.y < camPos.y - 5.f) {
-                tr.position = {
-                    camPos.x + dx(rng),
-                    camPos.y + 30.f,
-                    camPos.z + dz(rng)
-                };
+                if (e != null) {
+                    float vel = vy(rng);
+                    drops.push_back({
+                        e,
+                        { 0.f, vel, 0.f },
+                        spawnPos // Store initial position
+                        });
+
+                    if (i < 3) {
+                        Log::info("  -> Created entity {}, velocity: {:.2f}", (uint64_t)e, vel);
+                    }
+                    successCount++;
+                }
+                else {
+                    failCount++;
+                    if (failCount < 3) {
+                        Log::error("RainParticles: Instantiate returned null entity for particle {}", i);
+                    }
+                }
+            }
+            catch (const std::exception& ex) {
+                failCount++;
+                if (failCount < 3) {
+                    Log::error("RainParticles: Exception spawning particle {}: {}", i, ex.what());
+                }
             }
         }
+
+        Log::info("RainParticles: Spawn complete - {} successful, {} failed", successCount, failCount);
     }
 
+    void update(float dt) {
+        static int updateCallCount = 0;
+        updateCallCount++;
+
+        if (drops.empty()) {
+            Log::error("RainParticles: Update #{} called but drops vector is EMPTY!", updateCallCount);
+            return;
+        }
+
+        // Log first update
+        if (updateCallCount == 1) {
+            Log::info("RainParticles: FIRST UPDATE CALL - dt: {:.4f}, drops.size: {}", dt, drops.size());
+        }
+
+        std::uniform_real_distribution<float> dx(CITY_MIN_X, CITY_MAX_X);
+        std::uniform_real_distribution<float> dz(CITY_MIN_Z, CITY_MAX_Z);
+        std::uniform_real_distribution<float> vy(-45.f, -30.f);
+
+        int recycled = 0;
+        int updated = 0;
+        int positionChanged = 0;
+        int errors = 0;
+
+        // Track first particle for detailed debugging
+        bool logFirstParticle = (updateCallCount <= 10 || updateCallCount % 100 == 0);
+
+        for (size_t i = 0; i < drops.size(); ++i) {
+            auto& d = drops[i];
+
+            try {
+                auto tr = ecs->GetTransformRef(d.entity);
+                auto pos =tr.GetPosition();
+                glm::vec3 oldPos = pos;
+                glm::vec3 movement = d.velocity * dt;
+                pos += movement;
+                updated++;
+                if (glm::length(pos - oldPos) > 0.0001f) {
+                    positionChanged++;
+                }
+                if (pos.y <= GROUND_LEVEL) {
+                    pos = {
+                        dx(rng),
+                        SPAWN_HEIGHT,
+                        dz(rng)
+                    };
+                    d.velocity.y = vy(rng);
+                    d.lastPosition = pos;
+                    recycled++;
+                }
+                else {
+                    d.lastPosition = pos;
+                }
+                tr.SetPosition(pos);
+            }
+            catch (const std::exception& ex) {
+                errors++;
+                if (errors <= 3) {
+                    Log::error("RainParticles: Error updating particle {}: {}", i, ex.what());
+                }
+            }
+        }
+        static float logTimer = 0.0f;
+        logTimer += dt;
+        if (logTimer >= 2.0f || updateCallCount <= 5) {
+            logTimer = 0.0f;
+        }
+    }
     void shutdown() {
         for (auto& d : drops) {
-            ecs->DestroyEntity(d.entity);
+            try {
+                ecs->DestroyEntity(d.entity);
+            }
+            catch (...) {}
         }
         drops.clear();
         raindropModel.reset();
         ecs = nullptr;
     }
 };
+std::mt19937 RainParticles::rng{ std::random_device{}() };
 //--------------------------------------------------------------------------------------------------------
 class FireModelExplosion {
 public:
+
+     static std::mt19937 rng;
+
+
+
     struct FireInstance {
         entity_id entityId;
         glm::vec3 velocity;
@@ -141,7 +260,8 @@ public:
             // Create random velocity in all directions (spherical explosion)
             glm::vec3 velocity(velDist(gen), upDist(gen), velDist(gen));
 
-            // Instantiate fire.glb model at explosion position
+ 
+           // Instantiate fire.glb model at explosion position
             entity_id fireEntity = ecsRef->Instantiate(null, Component::Transform(), fireModel);
             auto fireTransform = ecsRef->GetTransformRef(fireEntity);
             fireTransform.SetPosition(position);
@@ -293,7 +413,7 @@ public:
     void generate() {
         // R = 0 (Road), S = 2 (Small Building), B = 1 (Big Building), G = 4 (Grass), P = 3 (Gas Pump), T = 5 (Trees)
         std::vector<std::vector<int>> cityMap = {
-            {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4},
+            {7, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4},
             {4, 8, 6, 6, 6, 8, 6, 6, 6, 8, 6, 6, 6, 8, 6, 6, 6, 6, 6, 6, 8, 6, 6, 8, 6, 6, 8, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 4, 0, 2, 2, 2, 2, 2, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 4, 4, 4, 4, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
@@ -327,7 +447,7 @@ public:
             {0, 4, 4, 4, 4, 8, 6, 1, 6, 8, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 4, 4, 4, 4, 1, 0, 4, 4, 4},
             {0, 4, 4, 4, 4, 0, 4, 0, 1, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 0, 1, 1, 1, 1, 1, 1, 0, 4, 4, 4},
             {8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 4, 4, 4},
-            {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}
+            {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 7}
         };
         float tileSize = 2.0f;
         int count = 0;
@@ -847,8 +967,8 @@ extern "C" {
         auto FT1 = ecs->GetTransformRef(fire_truck1);
         auto FT2 = ecs->GetTransformRef(fire_truck2);
         auto cameraTransform = ecs->GetTransformRef(camera);
-        rain.update(deltaTime, cameraTransform.GetPosition());
-
+        //rain.update(deltaTime, cameraTransform.GetPosition());
+        rain.update(deltaTime);
         // Update all animators
         Transform carCurrent = { carTransform.GetPosition(), carTransform.GetRotation(), carTransform.GetScale() };
         Transform carAnimated = carAnimator.update(carCurrent, deltaTime);
@@ -1300,8 +1420,12 @@ extern "C" {
     
         auto raindropModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/raindrop.glb"));
         auto cameraTransform = ecs->GetTransformRef(camera);
+        //auto raindropModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/raindrop.glb"));
+
         rain.init(ecs.get(), raindropModel);
-        rain.spawnOnce(cameraTransform.GetPosition());
+      //  rain.logBounds(); // Print coverage info
+        rain.spawnOnce(); // No camera position needed anymore!
+
 
         
         fireExplosion.init(model_fire, ecs);
