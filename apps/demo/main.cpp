@@ -22,7 +22,7 @@ public:
         entity_id entity;
         glm::vec3 velocity;
         glm::vec3 lastPosition; // Track position changes
-         
+        float mass;
     };
 
     std::vector<Drop> drops;
@@ -34,12 +34,19 @@ public:
     static std::mt19937 rng;
 
     // City bounds
-    static constexpr float CITY_MIN_X = -30.0f;
-    static constexpr float CITY_MAX_X = 28.0f;
+    static constexpr float CITY_MIN_X = -18.0f;
+    static constexpr float CITY_MAX_X = -8.0f;
     static constexpr float CITY_MIN_Z = -35.0f;
     static constexpr float CITY_MAX_Z = 33.0f;
     static constexpr float SPAWN_HEIGHT = 50.0f;
     static constexpr float GROUND_LEVEL = 0.0f;
+    // Physics
+    static constexpr glm::vec3 GRAVITY = { 0.f, -50.f, 0.f };
+    static constexpr glm::vec3 WIND = { 0.0f, 0.f, 33.0f };
+
+    static constexpr float AIR_DRAG = 0.35f;
+    static constexpr float TERMINAL_VELOCITY = -90.f;
+
 
     void init(ECS* ecs_, Ref<Model> model) {
         ecs = ecs_;
@@ -57,6 +64,8 @@ public:
     }
 
     void spawnOnce() {
+        
+
         if (!ecs) {
             Log::error("RainParticles: Cannot spawn - ECS is null!");
             return;
@@ -71,7 +80,7 @@ public:
         std::uniform_real_distribution<float> dz(CITY_MIN_Z, CITY_MAX_Z);
         std::uniform_real_distribution<float> dy(10.f, SPAWN_HEIGHT); // Start higher
         std::uniform_real_distribution<float> vy(-45.f, -30.f);
-
+        std::uniform_real_distribution<float> massDist(0.6f, 1.8f);
         int successCount = 0;
         int failCount = 0;
 
@@ -99,8 +108,10 @@ public:
                     drops.push_back({
                         e,
                         { 0.f, vel, 0.f },
-                        spawnPos // Store initial position
-                        });
+                        spawnPos,
+                        massDist(rng)
+                                            });
+
 
                     if (i < 3) {
                         Log::info("  -> Created entity {}, velocity: {:.2f}", (uint64_t)e, vel);
@@ -134,7 +145,6 @@ public:
             return;
         }
 
-        // Log first update
         if (updateCallCount == 1) {
             Log::info("RainParticles: FIRST UPDATE CALL - dt: {:.4f}, drops.size: {}", dt, drops.size());
         }
@@ -145,38 +155,73 @@ public:
 
         int recycled = 0;
         int updated = 0;
-        int positionChanged = 0;
         int errors = 0;
-
-        // Track first particle for detailed debugging
-        bool logFirstParticle = (updateCallCount <= 10 || updateCallCount % 100 == 0);
 
         for (size_t i = 0; i < drops.size(); ++i) {
             auto& d = drops[i];
 
             try {
                 auto tr = ecs->GetTransformRef(d.entity);
-                auto pos =tr.GetPosition();
+                auto pos = tr.GetPosition();
                 glm::vec3 oldPos = pos;
-                glm::vec3 movement = d.velocity * dt;
-                pos += movement;
-                updated++;
-                if (glm::length(pos - oldPos) > 0.0001f) {
-                    positionChanged++;
+
+                // ----- Forces -----
+                glm::vec3 acceleration = GRAVITY;
+
+                acceleration += WIND / d.mass;
+
+                float speed = glm::length(d.velocity);
+                if (speed > 0.001f) {
+                    glm::vec3 drag = -AIR_DRAG * d.velocity * speed;
+                    acceleration += drag / d.mass;
                 }
+
+                d.velocity += acceleration * dt;
+
+                if (d.velocity.y < TERMINAL_VELOCITY)
+                    d.velocity.y = TERMINAL_VELOCITY;
+
+                pos += d.velocity * dt;
+
+                glm::vec3 velocityDir = glm::normalize(d.velocity);
+
+                float pitchAngle = atan2(-velocityDir.y, velocityDir.z);
+
+                float yawAngle = atan2(velocityDir.x, velocityDir.z);
+
+                glm::quat pitchRotation = glm::angleAxis(pitchAngle, glm::vec3(1.0f, 0.0f, 0.0f));
+
+                // Yaw rotation (around Y-axis) to align with wind direction
+                glm::quat yawRotation = glm::angleAxis(yawAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+
+                // Combine rotations: yaw first, then pitch
+                glm::quat finalRotation = pitchRotation * yawRotation;
+
+                // Apply rotation to the raindrop
+                tr.SetRotation(finalRotation);
+                // ========================================
+
+                updated++;
+
+                // Recycle drops that hit ground
                 if (pos.y <= GROUND_LEVEL) {
                     pos = {
                         dx(rng),
                         SPAWN_HEIGHT,
                         dz(rng)
                     };
-                    d.velocity.y = vy(rng);
+                    d.velocity = { 0.f, vy(rng), 0.f };
                     d.lastPosition = pos;
+
+                    // Reset rotation for new drop
+                    tr.SetRotation(glm::quat(glm::vec3(0.0f, 0.0f, 0.0f)));
+
                     recycled++;
                 }
                 else {
                     d.lastPosition = pos;
                 }
+
                 tr.SetPosition(pos);
             }
             catch (const std::exception& ex) {
@@ -186,6 +231,7 @@ public:
                 }
             }
         }
+
         static float logTimer = 0.0f;
         logTimer += dt;
         if (logTimer >= 2.0f || updateCallCount <= 5) {
@@ -378,7 +424,8 @@ public:
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 entity_id car = null, camera = null, big_H = null, small_H = null, grass = null, road = null, pummp = null,
-truck = null, police = null, firetruck = null, city_parent = null, tree = null, car2 = null, fire = null, fire_truck1 = null, fire_truck2 = null;
+truck = null, police = null, firetruck = null, city_parent = null, tree = null, car2 = null, fire = null, fire_truck1 = null, fire_truck2 = null,tr = null, wheel_FR=null, wheel_FL = null, wheel_RR = null, wheel_RL = null;
+std::vector<entity_id> wheelEntities;
 Camera* camComp = nullptr;
 Ref<ECS> ecs;
 Ref<VFS> vfs;
@@ -413,7 +460,7 @@ public:
     void generate() {
         // R = 0 (Road), S = 2 (Small Building), B = 1 (Big Building), G = 4 (Grass), P = 3 (Gas Pump), T = 5 (Trees)
         std::vector<std::vector<int>> cityMap = {
-            {7, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4},
+            {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4},
             {4, 8, 6, 6, 6, 8, 6, 6, 6, 8, 6, 6, 6, 8, 6, 6, 6, 6, 6, 6, 8, 6, 6, 8, 6, 6, 8, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 4, 0, 2, 2, 2, 2, 2, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
             {2, 0, 2, 4, 2, 0, 2, 4, 1, 0, 1, 4, 2, 0, 4, 4, 4, 4, 4, 2, 0, 1, 1, 0, 2, 2, 0, 4, 4, 4},
@@ -447,7 +494,7 @@ public:
             {0, 4, 4, 4, 4, 8, 6, 1, 6, 8, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 4, 4, 4, 4, 1, 0, 4, 4, 4},
             {0, 4, 4, 4, 4, 0, 4, 0, 1, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 0, 1, 1, 1, 1, 1, 1, 0, 4, 4, 4},
             {8, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 4, 4, 4},
-            {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 7}
+            {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}
         };
         float tileSize = 2.0f;
         int count = 0;
@@ -828,80 +875,191 @@ extern "C" {
         auto carTransform = ecs->GetTransformRef(car);
 
         Transform camCurrent;
-        camCurrent.position = cameraTransform.GetPosition(); // (20, 0.32, 23.75)
-      
+        camCurrent.position = cameraTransform.GetPosition();
+        camCurrent.rotation = cameraTransform.GetRotation();
         camCurrent.scale = cameraTransform.GetScale();
-        
+
         glm::vec3 carPos = carTransform.GetPosition(); // (20, 0, 22.5)
-        glm::vec3 carForward = carTransform.Forward();
 
         cameraAnim
-            // Move closer to car
+            // Keyframe 1: Start - High northwest, looking at city
             .addKeyframeWithLookAt(
                 Transform{
-                    glm::vec3(20.0f, 0.32f, 22.9f), // Move from 23.75 to 22.0
+                    glm::vec3(-15.0f, 18.0f, -30.0f),  // High northwest
                     camCurrent.rotation,
                     camCurrent.scale
                 },
-                glm::vec3(carPos.x, 0.32, 0), // Look at car's forward direction
-                5.0f,
-                Easing::InSine
-               
+                glm::vec3(0.0f, 0.0f, 0.0f),  // Look at city center
+                4.0f,
+                Easing::InOutSine,
+                []() { Log::info("Camera Keyframe 1 Complete: High northwest overview"); }
             )
+
+            // Keyframe 2: Fly to north, still high - showcasing rain curtain
             .addKeyframeWithLookAt(
                 Transform{
-                    glm::vec3(20.0f, 0.32f, 22.8f), // Move from 23.75 to 22.0
+                    glm::vec3(-5.0f, 18.0f, -25.0f),  // North side, high
                     camCurrent.rotation,
                     camCurrent.scale
                 },
-                glm::vec3(carPos.x, 0.32, 0), // Look at car's forward direction
-                1.0f,
-                Easing::InSine
-
-            ).addKeyframeWithLookAt(
-                Transform{
-                    glm::vec3(20.05f, 0.32f, 22.65f), // Move from 23.75 to 22.0
-                    camCurrent.rotation,
-                    camCurrent.scale
-                },
-                carForward, // Look at car's forward direction
+                glm::vec3(5.0f, 0.0f, 5.0f),  // Pan across city
                 5.0f,
-                Easing::InSine
-            ).addKeyframeWithLookAt(
+                Easing::InOutSine,
+                []() { Log::info("Camera Keyframe 2 Complete: North position, rain curtain visible"); }
+            )
+
+            // Keyframe 3: Continue aerial tour to northeast
+            .addKeyframeWithLookAt(
                 Transform{
-                    glm::vec3(20.05, 0.32f, 22.65f), // Move from 23.75 to 22.0
+                    glm::vec3(10.0f, 18.0f, -20.0f),  // Northeast, high
                     camCurrent.rotation,
                     camCurrent.scale
                 },
-                glm::vec3(-5,0,22.65), // Look at car's forward direction
+                glm::vec3(-10.0f, 0.0f, 10.0f),  // Look across rain falling
+                5.0f,
+                Easing::InOutSine,
+                []() { Log::info("Camera Keyframe 3 Complete: Northeast aerial position"); }
+            )
+
+            // Keyframe 4: Swing around to east side, still high
+            .addKeyframeWithLookAt(
+                Transform{
+                    glm::vec3(15.0f, 17.0f, 0.0f),  // East side, high
+                    camCurrent.rotation,
+                    camCurrent.scale
+                },
+                glm::vec3(-5.0f, 0.0f, 0.0f),  // Look west through rain
+                5.0f,
+                Easing::InOutSine,
+                []() { Log::info("Camera Keyframe 4 Complete: East side, viewing rain through city"); }
+            )
+            // Keyframe 5: Move toward southeast, approaching car area from above
+            .addKeyframeWithLookAt(
+                Transform{
+                    glm::vec3(10.0f, 16.0f, 15.0f),  // Southeast, still well above buildings
+                    camCurrent.rotation,
+                    camCurrent.scale
+                },
+                glm::vec3(carPos.x, 0.0f, carPos.z),  // Start looking at car
+                5.0f,
+                Easing::InOutSine,
+                []() { Log::info("Camera Keyframe 5 Complete: Approaching car area from above"); }
+            )
+
+            // Keyframe 6: Get closer to car area, descending slightly
+            .addKeyframeWithLookAt(
+                Transform{
+                    glm::vec3(carPos.x, 15.0f, carPos.z),  // DIRECTLY ABOVE CAR
+                    camCurrent.rotation,
+                    camCurrent.scale
+                },
+                glm::vec3(carPos.x, 0.0f, carPos.z),  // Look straight down at car
+                5.0f,
+                Easing::InOutSine,
+                []() { Log::info("Camera Keyframe 6 Complete: Directly above car"); }
+            )
+
+            .addKeyframeWithLookAt(
+                Transform{
+                    glm::vec3(carPos.x + 3.0f, 10.0f, carPos.z + 3.0f),  // Spiral around car
+                    camCurrent.rotation,
+                    camCurrent.scale
+                },
+                glm::vec3(carPos.x, 0.0f, carPos.z),  // Always look at car
+                4.0f,
+                Easing::InOutSine,
+                []() { Log::info("Camera Keyframe 7 Complete: Spiral descent started (10m)"); }
+            )
+            // Keyframe 10: Land behind car at street level
+            .addKeyframeWithLookAt(
+                Transform{
+                    glm::vec3(20.0f, 0.32f, 23.75f),  // Final position behind car
+                    camCurrent.rotation,
+                    camCurrent.scale
+                },
+                glm::vec3(carPos.x, 0.32f, carPos.z),  // Look at car at eye level
+                3.0f,
+                Easing::InSine,
+                []() { Log::info("Camera Keyframe 10 Complete: Landed at street level behind car"); }
+            )
+
+            .addKeyframeWithLookAt(
+                Transform{
+                    glm::vec3(20.0f, 0.32f, 22.9f),
+                    camCurrent.rotation,
+                    camCurrent.scale
+                },
+                glm::vec3(carPos.x, 0.32f, 0.0f),
                 3.0f,
                 Easing::InSine
-                ).addKeyframeWithLookAt(
-                    Transform{
-                        glm::vec3(20.05, 0.32f, 22.65f), // Move from 23.75 to 22.0
-                        camCurrent.rotation,
-                        camCurrent.scale
-                    },
-                    glm::vec3(10, 0, 22.65), // Look at car's forward direction
-                    3.0f,
-                    Easing::InSine
-                ).addKeyframeWithLookAt(
-                    Transform{
-                        glm::vec3(20, 0.35f, 23.75f), // Move from 23.75 to 22.0
-                        camCurrent.rotation,
-                        camCurrent.scale
-                    },
-                    glm::vec3(20,0.32,22.5), // Look at car's forward direction
-                    2.0f,
-                    Easing::Linear,
-                    []() {
-                        // After intro, start car animation and switch to tracking
-                        setupCarAnimation();
-                        camMode = TRACKING;
-                    }
-                );
+            )
 
-        cameraAnim.play(camCurrent, carPos);
+            .addKeyframeWithLookAt(
+                Transform{
+                    glm::vec3(20.0f, 0.32f, 22.8f),
+                    camCurrent.rotation,
+                    camCurrent.scale
+                },
+                glm::vec3(carPos.x, 0.32f, 0.0f),
+                1.0f,
+                Easing::InSine
+            )
+
+            // Keyframe 10: Very close, look at car forward
+            .addKeyframeWithLookAt(
+                Transform{
+                    glm::vec3(20.05f, 0.32f, 22.65f),
+                    camCurrent.rotation,
+                    camCurrent.scale
+                },
+                carTransform.Forward(),
+                3.0f,
+                Easing::InSine
+            )
+
+            // Keyframe 11: Pan left
+            .addKeyframeWithLookAt(
+                Transform{
+                    glm::vec3(20.05f, 0.32f, 22.65f),
+                    camCurrent.rotation,
+                    camCurrent.scale
+                },
+                glm::vec3(-5.0f, 0.0f, 22.65f),
+                2.0f,
+                Easing::InSine
+            )
+
+            // Keyframe 12: Pan right
+            .addKeyframeWithLookAt(
+                Transform{
+                    glm::vec3(20.05f, 0.32f, 22.65f),
+                    camCurrent.rotation,
+                    camCurrent.scale
+                },
+                glm::vec3(10.0f, 0.0f, 22.65f),
+                2.0f,
+                Easing::InSine
+            )
+
+            // Keyframe 13: Final position - look at car, ready to start
+            .addKeyframeWithLookAt(
+                Transform{
+                    glm::vec3(20.0f, 0.35f, 23.75f),
+                    camCurrent.rotation,
+                    camCurrent.scale
+                },
+                glm::vec3(20.0f, 0.32f, 22.5f),  // Look directly at car
+                2.0f,
+                Easing::Linear,
+                []() {
+                    // After intro, start car animation and switch to tracking
+                    setupCarAnimation();
+                    camMode = TRACKING;
+                }
+        );
+
+        // Start animation from current camera position
+        cameraAnim.play(camCurrent, glm::vec3(0.0f, 5.0f, 0.0f));
     }
 
     void setupCameraFollowAnimation() {
@@ -954,13 +1112,18 @@ extern "C" {
         cameraAnim.play(camCurrent, carPos);
     }
 
-    // Setup dramatic spinning camera around crash site
+
 
    
     void scene_update(float deltaTime) {
         fireExplosion.update(deltaTime);
         globalTime += deltaTime;
-       
+        
+        auto wheel1 = ecs->GetTransformRef(wheel_FL);
+        auto wheel2= ecs->GetTransformRef(wheel_RR);
+        auto wheel3= ecs->GetTransformRef(wheel_RL);
+        auto wheel4= ecs->GetTransformRef(wheel_FR);
+
         auto carTransform = ecs->GetTransformRef(car);
         auto policeT = ecs->GetTransformRef(police);
         auto car2T = ecs->GetTransformRef(car2);
@@ -1012,12 +1175,24 @@ extern "C" {
 
         switch (camMode) {
         case TRACKING: {
+    float wheelSpinSpeed = 4.0f; // radians per second
+    float angle = wheelSpinSpeed * deltaTime;
+    
+    // Create rotation quaternion for wheel spin (around local X axis)
+    glm::quat spin = glm::angleAxis(angle, glm::vec3(1, 0, 0));
+
+    // Apply rotation to each wheel
+    wheel1.SetRotation(spin * wheel1.GetRotation());
+    wheel2.SetRotation(spin * wheel2.GetRotation());
+    wheel3.SetRotation(spin * wheel3.GetRotation());
+    wheel4.SetRotation(spin * wheel4.GetRotation());
             // Continuous tracking behind car
             if (!cameraAnim.isAnimating()) {
                 glm::vec3 trackingPos = glm::vec3(carPos.x, 0.35f, carPos.z + 1.25);
                 cameraTransform.SetPosition(trackingPos);
                 camComp->LookAt(trackingPos, carPos);
             }
+            
             break;
         }
         case SPIN: {
@@ -1105,7 +1280,7 @@ extern "C" {
                 },
                 6.0f,
                 Easing::InOutQuad,
-                []() { camMode = CAMERA_FOLLOW; } // Switch to follow camera
+                []() { camMode = CAMERA_FOLLOW; } 
             )
             // FIRST_TURN
             .addKeyframe(
@@ -1344,9 +1519,37 @@ extern "C" {
             );
         fire2Anim.play(ft2Current);
     }
+    void CollectWheels(ECS* ecs, entity_id entity) {
+        for (entity_id child : ChildrenRange(ecs, entity)) {
+
+            if (ecs->HasComponent<Name>(child)) {
+                const auto& name = ecs->GetComponent<Name>(child).name;
+
+                if (name.starts_with("Wheel_FR")) {
+                    wheel_FR=child;
+                    Log::info("Found Wheel_FR");
+                }
+                if (name.starts_with("Wheel_RR")) {
+                    wheel_RR = child;
+                    Log::info("Found Wheel_RR");
+                }
+                if (name.starts_with("Wheel_FL")) {
+                    wheel_FL = child;
+                    Log::info("Found Wheel_FL");
+                }
+                if (name.starts_with("Wheel_RL")) {
+                    wheel_RL = child;
+                    Log::info("Found Wheel_RL");
+                }
+            }
+
+            CollectWheels(ecs, child);
+        }
+    }
+
     void scene_init(scene_data_t scene_data) {
         // Scene preamble
-        
+        glClearColor(0.0, 0.0, 0.0, 1.0);
         Application& app = Application::Get();
         ecs = app.GetECS();
         vfs = app.GetVFS();
@@ -1359,8 +1562,9 @@ extern "C" {
         auto& cam = ecs->AddComponent<Camera>(camera, Camera::Perspective());
         cam.isMain = true;
         camComp = &cam;
-        auto cameraT= ecs->GetTransformRef(camera);
-        cameraT.SetPosition({ 20,0.32,23.75 });
+        auto cameraT = ecs->GetTransformRef(camera);
+        cameraT.SetPosition({ 26,10,-27 });
+        camComp->LookAt(glm::vec3{ 26,10,-27 }, glm::vec3{ 2,5,-3 });
         // Load and instantiate our 3D model
         Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/car_expo.glb"));
         car = ecs->Instantiate(null, Component::Transform(), model);
@@ -1368,14 +1572,15 @@ extern "C" {
         carT.SetPosition({ 20.0f,0.0f,22.5f });
         carT.SetRotation(glm::angleAxis(1.5708f, glm::vec3({ 0,1,0 })));
         carT.SetScale(glm::vec3(0.5, 0.5, 0.5));
-        
+       
+
         Ref<Model> model1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/tank.glb"));
         truck = ecs->Instantiate(null, Component::Transform(), model1);
         auto truckT = ecs->GetTransformRef(truck);
         truckT.SetPosition({ 5.0f, 0.0f, -19.0f });
         truckT.SetScale({ 0.25f,0.25f,0.25f });
         Ref<Model> model_fire = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/fire.glb"));
-        fire = ecs->Instantiate(null, Component::Transform(), model_fire);
+        //fire = ecs->Instantiate(null, Component::Transform(), model_fire);
         Ref<Model> modelpolice = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Police Car.glb"));
         police = ecs->Instantiate(null, Component::Transform(), modelpolice);
         auto policeT = ecs->GetTransformRef(police);
@@ -1399,7 +1604,7 @@ extern "C" {
         Ft2.SetPosition({ 20.0f, 0.0f, -15.0f }); // ← change from 0.0f → still 0.0f (or was 0.0f already)
         Ft2.SetScale({ 1.5f,1.5f,1.5f });
         Ft2.SetRotation(glm::angleAxis(-1.5708f * 2, glm::vec3({ 0,1,0 })));
-     
+        Ref<Model> guy = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Guy.glb"));
         Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H1.glb"), LoadCfg::Model{ .static_mesh = true });
         city.bigModel1 = cityModel;
         Ref<Model> cityModel2 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H3.glb"), LoadCfg::Model{ .static_mesh = true });
@@ -1417,11 +1622,11 @@ extern "C" {
         Ref<Model> tree = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/tree.glb"), LoadCfg::Model{ .static_mesh = true });
         city.trees = tree;
         Ref<VFS> vfs = Application::Get().GetVFS(); 
-    
+        
         auto raindropModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/raindrop.glb"));
         auto cameraTransform = ecs->GetTransformRef(camera);
         //auto raindropModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/raindrop.glb"));
-
+        CollectWheels(ecs.get(), car);
         rain.init(ecs.get(), raindropModel);
       //  rain.logBounds(); // Print coverage info
         rain.spawnOnce(); // No camera position needed anymore!

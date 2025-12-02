@@ -23,7 +23,7 @@ namespace Engine {
 
 	void Application::Run() {
 		// Default GL state variables
-		glClearColor(0.0086f, 0.0086f, 0.0086f, 1); // CHANGE: Gamma corrected values
+		glClearColor(1.0f, 1.0f, 1.0f, 1); // CHANGE: Gamma corrected values
 		glEnable(GL_DEPTH_TEST);
 
 		using clock = std::chrono::steady_clock;
