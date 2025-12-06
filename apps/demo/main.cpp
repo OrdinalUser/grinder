@@ -402,7 +402,7 @@ public:
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 entity_id car = null, camera = null, big_H = null, small_H = null, grass = null, road = null, pummp = null,
 truck = null, police = null, firetruck = null, city_parent = null, tree = null, car2 = null, fire = null, fire_truck1 = null, fire_truck2 = null, tr = null, wheel_FR = null, wheel_FL = null, wheel_RR = null, wheel_RL = null;
-entity_id mainCarLight = null;
+entity_id mainCarLightLeft = null, mainCarLightRight = null;
 DirectionEstimator carDirectionEstimator;
 std::vector<entity_id> wheelEntities;
 Camera* camComp = nullptr;
@@ -1101,7 +1101,8 @@ extern "C" {
     void scene_update(float deltaTime) {
         carDirectionEstimator.Integrate(ecs->GetTransformRef(car).GetPosition());
         quat mainCarLightRotation = carDirectionEstimator.Forward(); // Rotate to match our car estimated forward
-        ecs->GetTransformRef(mainCarLight).SetRotation(mainCarLightRotation);
+        ecs->GetTransformRef(mainCarLightLeft).SetRotation(mainCarLightRotation);
+        ecs->GetTransformRef(mainCarLightRight).SetRotation(mainCarLightRotation);
 
         fireExplosion.update(deltaTime);
         globalTime += deltaTime;
@@ -1573,9 +1574,14 @@ extern "C" {
 
         // Add lights to the main car just because
         quat defaultMainCarLightDirection = glm::angleAxis(glm::radians(-90.0f), vec3{1, 0, 0});
-        mainCarLight = ecs->CreateEntity3D(car, Transform{ .position = {0, 1, -0.4f} });
+        constexpr vec3 mainCarLightLeftPos = vec3{ -0.45, 0.3, -0.2 };
+        constexpr vec3 mainCarLightRightPos = vec3{ 0.3, 0.2, -0.45 };
+        // left side: {-0.45, 0.3, -0.2}; right side: {0.3, 0.2, -0.45}
+        mainCarLightLeft = ecs->CreateEntity3D(car, Transform{ .position = mainCarLightLeftPos });
+        mainCarLightRight = ecs->CreateEntity3D(car, Transform{ .position = mainCarLightRightPos });
         Light mainCarLightComp = Light::Spot(12.5, 17.5, 100, vec3{ 1 }, 100);
-        ecs->AddComponent(mainCarLight, mainCarLightComp);
+        ecs->AddComponent(mainCarLightLeft, mainCarLightComp);
+        ecs->AddComponent(mainCarLightRight, mainCarLightComp);
         carDirectionEstimator.SetInitialDirection(glm::eulerAngles(defaultMainCarLightDirection));
         carDirectionEstimator.Integrate(carT.GetPosition());
 
