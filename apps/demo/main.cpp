@@ -72,242 +72,6 @@ struct DirectionEstimator {
 };
 
 float globalTime = 0.0f;
-//class RainParticles {
-//public:
-//    struct Drop {
-//        entity_id entity;
-//        glm::vec3 velocity;
-//        glm::vec3 lastPosition; // Track position changes
-//        float mass;
-//    };
-//
-//    std::vector<Drop> drops;
-//    uint32_t maxDrops = 20000;  // REDUCED for easier debugging
-//
-//    ECS* ecs = nullptr;
-//    Ref<Model> raindropModel;
-//
-//    static std::mt19937 rng;
-//
-//    // City bounds
-//    static constexpr float CITY_MIN_X = -33.0f;
-//    static constexpr float CITY_MAX_X = 28.0f;
-//    static constexpr float CITY_MIN_Z = -35.0f;
-//    static constexpr float CITY_MAX_Z = 33.0f;
-//    static constexpr float SPAWN_HEIGHT = 17.5f;
-//    static constexpr float GROUND_LEVEL = 0.0f;
-//    // Physics
-//    static constexpr glm::vec3 GRAVITY = { 0.f, -10.f, 0.f };
-//    static constexpr glm::vec3 WIND = { 0.0f, 0.f, 5.0f };
-//
-//    static constexpr float AIR_DRAG = 0.50f;
-//    static constexpr float TERMINAL_VELOCITY = -90.f;
-//
-//
-//    void init(ECS* ecs_, Ref<Model> model) {
-//        ecs = ecs_;
-//        raindropModel = model;
-//
-//        if (!ecs) {
-//            Log::error("RainParticles: ECS is null!");
-//        }
-//        if (!raindropModel) {
-//            Log::error("RainParticles: raindropModel is null!");
-//        }
-//        else {
-//            Log::info("RainParticles: Model loaded successfully");
-//        }
-//    }
-//
-//    void spawnOnce() {
-//
-//
-//        if (!ecs) {
-//            Log::error("RainParticles: Cannot spawn - ECS is null!");
-//            return;
-//        }
-//        if (!raindropModel) {
-//            Log::error("RainParticles: Cannot spawn - raindropModel is null!");
-//            return;
-//        }
-//        drops.reserve(maxDrops);
-//        // Random distributions for city coverage
-//        std::uniform_real_distribution<float> dx(CITY_MIN_X, CITY_MAX_X);
-//        std::uniform_real_distribution<float> dz(CITY_MIN_Z, CITY_MAX_Z);
-//        std::uniform_real_distribution<float> dy(SPAWN_HEIGHT - 5, SPAWN_HEIGHT + 5); // Start higher
-//        std::uniform_real_distribution<float> vy(-45.f, -30.f);
-//        std::uniform_real_distribution<float> massDist(0.1f, 1.1f);
-//        int successCount = 0;
-//        int failCount = 0;
-//
-//        for (uint32_t i = 0; i < maxDrops; ++i) {
-//            Component::Transform tr;
-//            glm::vec3 spawnPos = {
-//                dx(rng),
-//                dy(rng),
-//                dz(rng)
-//            };
-//
-//            tr.position = spawnPos;
-//            tr.scale = glm::vec3(0.3f); // BIGGER for visibility
-//
-//            if (i < 3) {
-//                Log::info("RainParticles: Spawning particle {} at ({:.2f}, {:.2f}, {:.2f})",
-//                    i, tr.position.x, tr.position.y, tr.position.z);
-//            }
-//
-//            try {
-//                entity_id e = ecs->Instantiate(null, tr, raindropModel);
-//                auto d = ecs->GetTransformRef(e);
-//                d.SetPosition(spawnPos);
-//                if (e != null) {
-//                    float vel = vy(rng);
-//                    drops.push_back({
-//                        e,
-//                        { 0.f, vel, 0.f },
-//                        spawnPos,
-//                        massDist(rng)
-//                        });
-//
-//
-//                    if (i < 3) {
-//                        Log::info("  -> Created entity {}, velocity: {:.2f}", (uint64_t)e, vel);
-//                    }
-//                    successCount++;
-//                }
-//                else {
-//                    failCount++;
-//                    if (failCount < 3) {
-//                        Log::error("RainParticles: Instantiate returned null entity for particle {}", i);
-//                    }
-//                }
-//            }
-//            catch (const std::exception& ex) {
-//                failCount++;
-//                if (failCount < 3) {
-//                    Log::error("RainParticles: Exception spawning particle {}: {}", i, ex.what());
-//                }
-//            }
-//        }
-//
-//        Log::info("RainParticles: Spawn complete - {} successful, {} failed", successCount, failCount);
-//    }
-//
-//    void update(float dt) {
-//        static int updateCallCount = 0;
-//        updateCallCount++;
-//
-//        if (drops.empty()) {
-//            Log::error("RainParticles: Update #{} called but drops vector is EMPTY!", updateCallCount);
-//            return;
-//        }
-//
-//        if (updateCallCount == 1) {
-//            Log::info("RainParticles: FIRST UPDATE CALL - dt: {:.4f}, drops.size: {}", dt, drops.size());
-//        }
-//
-//        std::uniform_real_distribution<float> dx(CITY_MIN_X, CITY_MAX_X);
-//        std::uniform_real_distribution<float> dz(CITY_MIN_Z, CITY_MAX_Z);
-//        std::uniform_real_distribution<float> vy(-45.f, -30.f);
-//
-//        int recycled = 0;
-//        int updated = 0;
-//        int errors = 0;
-//
-//        for (size_t i = 0; i < drops.size(); ++i) {
-//            auto& d = drops[i];
-//
-//            try {
-//                auto tr = ecs->GetTransformRef(d.entity);
-//                auto pos = tr.GetPosition();
-//                glm::vec3 oldPos = pos;
-//
-//                // ----- Forces -----
-//                glm::vec3 acceleration = GRAVITY;
-//
-//                acceleration += WIND / d.mass;
-//
-//                float speed = glm::length(d.velocity);
-//                if (speed > 0.001f) {
-//                    glm::vec3 drag = -AIR_DRAG * d.velocity * speed;
-//                    acceleration += drag / d.mass;
-//                }
-//
-//                d.velocity += acceleration * dt;
-//
-//                if (d.velocity.y < TERMINAL_VELOCITY)
-//                    d.velocity.y = TERMINAL_VELOCITY;
-//
-//                pos += d.velocity * dt;
-//
-//                glm::vec3 velocityDir = glm::normalize(d.velocity);
-//
-//                float pitchAngle = atan2(-velocityDir.y, velocityDir.z);
-//
-//                float yawAngle = atan2(velocityDir.x, velocityDir.z);
-//
-//                glm::quat pitchRotation = glm::angleAxis(pitchAngle, glm::vec3(1.0f, 0.0f, 0.0f));
-//
-//                // Yaw rotation (around Y-axis) to align with wind direction
-//                glm::quat yawRotation = glm::angleAxis(yawAngle, glm::vec3(0.0f, 1.0f, 0.0f));
-//
-//                // Combine rotations: yaw first, then pitch
-//                glm::quat finalRotation = pitchRotation * yawRotation;
-//
-//                // Apply rotation to the raindrop
-//                tr.SetRotation(finalRotation);
-//                // ========================================
-//
-//                updated++;
-//
-//                // Recycle drops that hit ground
-//                if (pos.y <= GROUND_LEVEL) {
-//                    pos = {
-//                        dx(rng),
-//                        SPAWN_HEIGHT,
-//                        dz(rng)
-//                    };
-//                    d.velocity = { 0.f, vy(rng), 0.f };
-//                    d.lastPosition = pos;
-//
-//                    // Reset rotation for new drop
-//                    tr.SetRotation(glm::quat(glm::vec3(0.0f, 0.0f, 0.0f)));
-//
-//                    recycled++;
-//                }
-//                else {
-//                    d.lastPosition = pos;
-//                }
-//
-//                tr.SetPosition(pos);
-//            }
-//            catch (const std::exception& ex) {
-//                errors++;
-//                if (errors <= 3) {
-//                    Log::error("RainParticles: Error updating particle {}: {}", i, ex.what());
-//                }
-//            }
-//        }
-//
-//        static float logTimer = 0.0f;
-//        logTimer += dt;
-//        if (logTimer >= 2.0f || updateCallCount <= 5) {
-//            logTimer = 0.0f;
-//        }
-//    }
-//    void shutdown() {
-//        for (auto& d : drops) {
-//            try {
-//                ecs->DestroyEntity(d.entity);
-//            }
-//            catch (...) {}
-//        }
-//        drops.clear();
-//        raindropModel.reset();
-//        ecs = nullptr;
-//    }
-//};
-//std::mt19937 RainParticles::rng{ std::random_device{}() };
 
 class RainParticles {
 public:
@@ -322,7 +86,7 @@ public:
     static constexpr float CITY_MAX_X = 28.0f;
     static constexpr float CITY_MIN_Z = -35.0f;
     static constexpr float CITY_MAX_Z = 33.0f;
-    static constexpr float SPAWN_HEIGHT = 17.5f;
+    static constexpr float SPAWN_HEIGHT = 20.0f;
     static constexpr float GROUND_LEVEL = 0.0f;
 
     // Physics constants
@@ -338,14 +102,14 @@ public:
         , m_Rng(std::random_device{}())
     {
         // Define city bounds for rain spawn area
-        Engine::BBox bounds{ vec3{0}, vec3{0} };
-        bounds.min = { CITY_MIN_X, GROUND_LEVEL, CITY_MIN_Z };
-        bounds.max = { CITY_MAX_X, SPAWN_HEIGHT + 5.0f, CITY_MAX_Z };
+        m_Bounds = BBox{ vec3{0}, vec3{0} };
+        m_Bounds.min = { CITY_MIN_X, GROUND_LEVEL, CITY_MIN_Z };
+        m_Bounds.max = { CITY_MAX_X, SPAWN_HEIGHT + 5.0f, CITY_MAX_Z };
 
         // Create particle system with RAIN spawn method and RESPAWN lifetime
         m_ParticleSystem = std::make_unique<Engine::ParticleSystem<RainDropData>>(
             maxDrops,
-            bounds,
+            m_Bounds,
             drawable,
             Engine::Particle::SpawnMethod::RAIN,
             Engine::Particle::LifetimeMethod::RESPAWN
@@ -388,14 +152,25 @@ public:
                 // Wind force (scaled by mass)
                 acceleration += WIND / particle.mass;
 
-                // Air drag (proportional to velocity squared)
+                // Air drag - Fixed formula: drag = -k * v * |v| (quadratic drag)
                 float speed = glm::length(particle.velocity);
                 if (speed > 0.001f) {
-                    glm::vec3 drag = -AIR_DRAG * particle.velocity * speed;
-                    acceleration += drag / particle.mass;
+                    // Proper quadratic drag: F = -k * v * |v|
+                    // Divide by mass: a = F/m = -k * v * |v| / m
+                    glm::vec3 dragForce = -AIR_DRAG * particle.velocity * speed;
+                    glm::vec3 dragAccel = dragForce / particle.mass;
+
+                    // Clamp drag acceleration to prevent instability with large dt
+                    float dragMagnitude = glm::length(dragAccel);
+                    float maxDragAccel = speed / deltaTime; // Can't decelerate more than current speed
+                    if (dragMagnitude > maxDragAccel) {
+                        dragAccel = glm::normalize(dragAccel) * maxDragAccel;
+                    }
+
+                    acceleration += dragAccel;
                 }
 
-                // Update velocity
+                // Update velocity with semi-implicit integration
                 particle.velocity += acceleration * deltaTime;
 
                 // Clamp to terminal velocity
@@ -407,7 +182,6 @@ public:
                 pos += particle.velocity * deltaTime;
 
                 // ===== Rotation based on velocity direction =====
-                // IMPORTANT: Recalculate speed AFTER velocity update
                 float currentSpeed = glm::length(particle.velocity);
                 if (currentSpeed > 0.001f) {
                     glm::vec3 velocityDir = glm::normalize(particle.velocity);
@@ -420,7 +194,7 @@ public:
 
                     instance.transform.rotation = pitchRotation * yawRotation;
                 }
-                
+
                 // ===== Calculate Model Matrix =====
                 glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), instance.transform.position);
                 glm::mat4 rotationMatrix = glm::mat4_cast(instance.transform.rotation);
@@ -440,10 +214,6 @@ public:
     }
 
     void shutdown() {
-        #ifdef _OPENMP
-                // Ensure any in-flight updates complete
-        #pragma omp barrier
-        #endif
         m_ParticleSystem.reset();
         m_Renderer.reset();
         Log::info("RainParticles: Shutdown complete");
@@ -453,6 +223,7 @@ private:
     std::unique_ptr<Engine::ParticleSystem<RainDropData>> m_ParticleSystem;
     std::shared_ptr<Engine::Renderer> m_Renderer;
     std::mt19937 m_Rng;
+    BBox m_Bounds;
 };
  
 //--------------------------------------------------------------------------------------------------------
@@ -1859,9 +1630,7 @@ extern "C" {
 
         auto raindropModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/raindrop.glb"));
         auto cameraTransform = ecs->GetTransformRef(camera);
-        //auto raindropModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/raindrop.glb"));
         CollectWheels(ecs.get(), car);
-        
         
         // City bounds
         static constexpr float CITY_MIN_X = -33.0f;
@@ -1871,28 +1640,22 @@ extern "C" {
         static constexpr float SPAWN_HEIGHT = 17.5f;
         static constexpr float GROUND_LEVEL = 0.0f;
 
+        // Initialize particle system
         Ref<Model> raindrop = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/raindrop.glb"), LoadCfg::Model{ .static_mesh = true });
         rainParticles = std::make_unique<RainParticles>(
             renderer,
             Drawable3D{.model=raindrop, .collectionIndex=0},
-            20000
+            10000
         );
         rainParticles->spawnOnce();
-
-        // rain.init(ecs.get(), raindropModel);
-        //  rain.logBounds(); // Print coverage info
-        // rain.spawnOnce(); // No camera position needed anymore!
-
-
 
         fireExplosion.init(model_fire, ecs);
         city.shader = shader;
 
         city.generate();
         setupCameraIntroAnimation();
-
-        // Initialize particle system with an unlit shader from engine assets
     }
+
     void scene_render() {
         rainParticles->draw();
         city.shader->Enable();

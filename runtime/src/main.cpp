@@ -58,7 +58,7 @@ int main() {
 #endif // _DEBUG
             app.PushLayer(static_cast<ILayer*>(new SceneLayer(new Scene(
                 dllPath,
-                std::filesystem::path("apps") / scene_name;
+                std::filesystem::path("apps") / scene_name
             ))));
 
 #ifdef _DEBUG

@@ -85,7 +85,7 @@ namespace Engine {
 
                 // Sequential collection of dead particles
                 for (size_t i = 0; i < n; i++) {
-                    if (!m_Instances[i].alive || !IsAlive(i)) {
+                    if (!m_Instances[i].alive) {
                         deadIndices.push_back(i);
                     }
                 }
@@ -124,7 +124,7 @@ namespace Engine {
             case Particle::SpawnMethod::RAIN: {
                 inst.transform.position = {
                     RandomFloat(m_Bounds.min.x, m_Bounds.max.x),
-                    m_Bounds.max.y,
+                    m_Bounds.max.y-1.0f,
                     RandomFloat(m_Bounds.min.z, m_Bounds.max.z)
                 };
                 inst.transform.rotation = glm::quat(1, 0, 0, 0);
@@ -144,12 +144,6 @@ namespace Engine {
 
             // Reset user payload T
             m_Particles[idx] = T{};
-        }
-
-        // Example lifetime test (override if needed)
-        bool IsAlive(size_t i) const {
-            const auto& tr = m_Instances[i].transform;
-            return tr.position.y > m_Bounds.min.y;
         }
 
         glm::vec3 RandomPointInBounds(const BBox& b) {
