@@ -65,6 +65,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(backward_cpp)
 
+find_package(OpenMP REQUIRED)
+
 # Set unified output directories for all targets
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)

@@ -453,10 +453,24 @@ namespace Engine {
 		ENGINE_API void MoveTowards(const vec3& targetPos, float speed);
 		ENGINE_API void RotateTowards(const quat& targetRotation, float maxRadians);
 		ENGINE_API void RotateTowards(const vec3& targetEuler, float maxRadians);
+		ENGINE_API void LookAtWorld(const vec3& worldTarget, const vec3& worldUp = vec3(0, 1, 0));
+
+		// World
+		ENGINE_API const mat4& GetModelMatrix() const;
+		ENGINE_API vec3 GetWorldPosition() const;
+		ENGINE_API quat GetWorldRotation() const;
+		ENGINE_API vec3 WorldForward() const;
+		ENGINE_API vec3 WorldRight() const;
+		ENGINE_API vec3 WorldUp() const;
+
+		// Other
+		ENGINE_API bool HasParent() const;
+		ENGINE_API void Apply();
 
 	private:
 		ENGINE_API RefTransform(ECS& ecs, entity_id entity, Component::Transform& transform, TransformSystem& system);
-		ENGINE_API mat4 GetParentWorldMatrix() const;
+		ENGINE_API mat4 GetParentModelMatrix() const;
+		ENGINE_API quat GetParentWorldRotation() const;
 
 		Component::Transform& data;
 		entity_id id;

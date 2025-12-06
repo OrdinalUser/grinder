@@ -1,6 +1,8 @@
 # CMake and VS nonsense
 build/
 *.vs
+.mypy_cache
+.vscode
 
 # Dev - Other
 imgui.ini

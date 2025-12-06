@@ -20,7 +20,7 @@ namespace Engine {
 	}
 
 	void SceneLayer::OnDetach() {
-		m_Scene->Shutdown();
+		// m_Scene->Shutdown(); // let destructor handle this
 	}
 
 	void SceneLayer::OnRender(const std::vector<entity_id>& updatedEntities) {

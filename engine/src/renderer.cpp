@@ -4,10 +4,19 @@
 #include <engine/perf_profiler.hpp>
 #include <algorithm>
 
-constexpr static struct {
-    float BloomStrength = 1.2f;
-    float BrightnessThreshold = 1.0f;
-} RendererConfig;
+#include <engine/log.hpp>
+
+namespace Engine {
+
+    constexpr static struct {
+        float BloomStrength = 0.8f;
+        float BrightnessThreshold = 1.0f;
+    } RendererConfig;
+
+    constexpr static struct {
+        static constexpr size_t MAX_LIGHTS_GLOBAL = 32;
+    } LightConfig;
+}
 
 static const char* GLErrorToString(GLenum err) {
     switch (err) {
@@ -244,15 +253,14 @@ namespace Engine {
         Window& window = Engine::Application::Get().GetWindow();
 
         // Drawing
-        glGenBuffers(1, &m_ssbo); // Prepare our reusable ssbo for instancing
+        glGenBuffers(1, &m_instanceSSBO); // Prepare our reusable ssbo for instancing
         glGenBuffers(1, &m_instancesSSBO);
         glGenBuffers(1, &m_visibilitySSBO);
         glGenBuffers(1, &m_frustumUBO);
 
         // Main framebuffer
-        // InitializeFramebuffer(window.GetWidth(), window.GetHeight());
         m_Framebuffer = new Framebuffer(window.GetWidth(), window.GetHeight());
-        m_Framebuffer->AddColorAttachment()
+        m_Framebuffer->AddColorAttachment({ .Format = Framebuffer::TextureFormat::RGBA16F })
             .SetDepthAttachment()
             .Build();
     
@@ -277,12 +285,21 @@ namespace Engine {
         m_postProcessingShader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/postprocess"));
         m_brightPassShader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/postprocess_bright_extract"));
         m_blurShader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/postprocess_blur"));
+        m_depthPrepassShader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/depth_prepass"));
+
+        // Prepare buffers
+        static_assert(sizeof(GPU_LightData) == 64);
+
+        glGenBuffers(1, &m_lightsSSBO);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_lightsSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, LightConfig.MAX_LIGHTS_GLOBAL * sizeof(GPU_LightData), nullptr, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
     }
 
     ENGINE_API Renderer::~Renderer() {
-        glDeleteBuffers(1, &m_ssbo);
+        glDeleteBuffers(1, &m_instanceSSBO);
         delete m_cullShader;
-        glDeleteBuffers(1, &m_ssbo);
+        glDeleteBuffers(1, &m_instanceSSBO);
         glDeleteBuffers(1, &m_instancesSSBO);
         glDeleteBuffers(1, &m_visibilitySSBO);
         glDeleteBuffers(1, &m_frustumUBO);
@@ -307,6 +324,7 @@ namespace Engine {
         if (m_hasCameraSet) {
             m_projViewMatrix = camera->projectionMatrix * camera->viewMatrix;
             m_cameraPosition = transform->modelMatrix * vec4(transform->position, 1.0f); // TODO
+            m_cameraForward = transform->Forward();
             ExtractFrustumPlanes();
         }
     }
@@ -355,7 +373,9 @@ namespace Engine {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_visibilitySSBO);
         glBindBufferBase(GL_UNIFORM_BUFFER, 3, m_frustumUBO);
         glDispatchCompute((m_gpuInstanceData.size() + 255) / 256, 1, 1);
+        
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        glUseProgram(0);
         PERF_END("Renderer_Culling");
 
         PERF_BEGIN("Renderer_Cmd");
@@ -372,7 +392,7 @@ namespace Engine {
             }
 
             // Determine if transparent
-            const GPUInstance& instance = m_gpuInstances[i];
+            const DrawInstance& instance = m_gpuInstances[i];
             if (instance.material->isTransparent) {
                 // Calculate distance to camera for sorting
                 float distance = 0.0f;
@@ -398,7 +418,7 @@ namespace Engine {
                 batch.modelMatrices.push_back(instance.transform->modelMatrix);
             }
         }
-        glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         PERF_END("Renderer_Cmd");
     }
 
@@ -409,26 +429,36 @@ namespace Engine {
         m_stats = Stats{};
         m_stats.totalObjects = m_gpuInstances.size();
 
-        // Run global culling
-        ProcessQueue();
-
+        ProcessQueue(); // Run global culling and fill command buffer
+        ProcessLights(); // Process lights into GPU format
+        
         BeginFramebufferPass();
 
-        // DepthPrepass
-        // TODO!
-
-        // Process lights into world space, clustered culling TODO
-        ProcessLights(); // TODO!
+        // Depth Prepass
+        glClearColor(m_glState.clearColor.r, m_glState.clearColor.g, m_glState.clearColor.b, m_glState.clearColor.a);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
+        glDepthFunc(GL_LESS);
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+        DrawDepthPrepass();
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        // glDepthMask(GL_FALSE); // this comment made it work? but isn't that like the point of a depth prepass?
+        glDepthFunc(GL_EQUAL);
 
         // Render opaque geometry
+        glClear(GL_COLOR_BUFFER_BIT);
         DrawOpaque();
 
         // Render transparent geometry
         if (!m_transparentQueue.empty()) {
+            glDepthMask(GL_TRUE);
+            glDepthFunc(GL_LESS);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             DrawTransparent();
+            glDisable(GL_BLEND);
         }
-
-        // Shadows, here?
 
         EndFramebufferPass();
     }
@@ -448,53 +478,70 @@ namespace Engine {
     // ========== Light Processing ==========
 
     void Renderer::ProcessLights() {
+        // Expected bottleneck due to CPU sided matrix processing, we don't care
         m_processedLights.clear();
         m_processedLights.reserve(m_queuedLights.size());
 
+        // Process ECS lights into GPU format
+        constexpr float PAD = 0.0f;
         for (const auto& [transform, light] : m_queuedLights) {
-            LightData data;
-            data.type = light->type;
-            data.color = light->color;
-            data.intensity = light->intensity;
+            GPU_LightData data;
+            vec3 worldPos = vec3(transform->modelMatrix[3]); // Get world position from recursively calculated hierarchical matrix
+            vec3 worldDir = (light->type == Light::Type::POINT) ? vec3(0.0f) : (light->type == Light::Type::SPOT) ? glm::normalize(transform->Forward()) : light->direction; // World direction, since light->direction is local
 
-            // Extract position and direction from transform
-            data.position = transform->position;
-            data.direction = transform->Forward();
+            data.positionAndType = vec4{
+                worldPos,
+                static_cast<float>(light->type)
+            };
 
-            // Copy light-specific properties
-            data.range = light->range;
-            data.innerCutoff = glm::cos(glm::radians(light->innerCutoffDegrees));
-            data.outerCutoff = glm::cos(glm::radians(light->outerCutoffDegrees));
+            data.directionAndRange = vec4{
+                worldDir,
+                light->range
+            };
 
-            m_processedLights.push_back(data);
+            data.colorAndIntensity = vec4{
+                light->color,
+                light->intensity
+            };
+
+            data.spotAnglesRadians = vec4{
+                light->innerCutoffRadians,
+                light->outerCutoffRadians,
+                PAD, PAD
+            };
+
+            m_processedLights.emplace_back(data);
         }
+
+        // Upload to GPU - Reuse SSBO buffer with global light cap in mind
+        if (!m_processedLights.empty()) {
+            const size_t upload_Count = std::min(LightConfig.MAX_LIGHTS_GLOBAL, m_processedLights.size());
+            if (m_processedLights.size() > LightConfig.MAX_LIGHTS_GLOBAL) {
+                Log::warn("Light count {} exceeds MAX_LIGHTS_GLOBAL {}, dropping {} lights",
+                    m_processedLights.size(), LightConfig.MAX_LIGHTS_GLOBAL,
+                    m_processedLights.size() - LightConfig.MAX_LIGHTS_GLOBAL);
+            }
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_lightsSSBO);
+            glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, upload_Count * sizeof(GPU_LightData), m_processedLights.data());
+        }
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
     }
 
+    // ======== Other ==========
+
     void Renderer::SetLightUniforms(Shader* shader) {
-        shader->SetUniform("uLightPos", vec3(30, 100, 0));
-        shader->SetUniform("uLightColor", vec3(0.19f, 0.19f, 0.64f)); // moonlight color, should be less intense! TODO!
-        // shader->SetUniform("uLightColor", vec3(1.0f));
-        // TODO: Light integration
-        /*shader->SetUniform("uLightCount", static_cast<int>(m_processedLights.size()));
-
-        for (size_t i = 0; i < m_processedLights.size(); ++i) {
-            std::string base = "uLights[" + std::to_string(i) + "].";
-            const LightData& light = m_processedLights[i];
-
-            shader->SetUniform(base + "type", static_cast<int>(light.type));
-            shader->SetUniform(base + "color", light.color);
-            shader->SetUniform(base + "intensity", light.intensity);
-            shader->SetUniform(base + "position", light.position);
-            shader->SetUniform(base + "direction", light.direction);
-            shader->SetUniform(base + "range", light.range);
-            shader->SetUniform(base + "innerCutoff", light.innerCutoff);
-            shader->SetUniform(base + "outerCutoff", light.outerCutoff);
-        }*/
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_lightsSSBO);
+        if (shader->HasUniform("uNumLights"))
+            shader->SetUniform("uNumLights", static_cast<int>(m_processedLights.size()));
+        if (shader->HasUniform("uAmbientLight"))
+            shader->SetUniform("uAmbientLight", vec3(0.0, 0.0, 0.0));
     }
 
     void Renderer::SetCommonUniforms(Shader* shader) {
+        auto& window = Application::Get().GetWindow();
         shader->SetUniform("uProjView", m_projViewMatrix);
-        shader->SetUniform("uViewPos", m_cameraPosition);
+        
+        if (shader->HasUniform("uViewPos")) shader->SetUniform("uViewPos", m_cameraPosition);
         SetLightUniforms(shader);
     }
 
@@ -508,8 +555,6 @@ namespace Engine {
             shader->SetUniform("uMaterial.shininess", material->shininess);
             if (material->isTransparent)
                 shader->SetUniform("uMaterial.opacity", material->opacity);
-            shader->SetUniform("uMaterial.emmisiveIntensity", material->emmisiveIntensity);
-            shader->SetUniform("uMaterial.emmisiveColor", material->emmisiveColor);
         }
         
         // Set textures (only for textured materials)
@@ -523,10 +568,23 @@ namespace Engine {
             if (material->normal && material->normal->id) {
                 shader->SetUniform("uMaterial.normalMap", *material->normal, Shader::TextureSlot::NORMAL);
             }
+            /*if (material->emmisive && (material->emmisive->id)) {
+                shader->SetUniform("uMaterial.emmisiveMap", *material->emmisive, Shader::TextureSlot::EMMISIVE);
+            }*/
+            shader->SetUniform("uMaterial.shininess", material->shininess);
+            // shader->SetUniform("uMaterial.emmisiveIntensity", material->emmisiveIntensity);
+            // shader->SetUniform("uMaterial.emmisiveColor", material->emmisiveColor);
+        }
+
+        if (material->renderType == Material::RenderType::EMMISIVE) {
+            if (material->diffuse && material->diffuse->id) {
+                shader->SetUniform("uMaterial.diffuseMap", *material->diffuse, Shader::TextureSlot::DIFFUSE);
+            }
             if (material->emmisive && (material->emmisive->id)) {
                 shader->SetUniform("uMaterial.emmisiveMap", *material->emmisive, Shader::TextureSlot::EMMISIVE);
             }
-            shader->SetUniform("uMaterial.shininess", material->shininess);
+            if (material->isTransparent)
+                shader->SetUniform("uMaterial.opacity", material->opacity);
             shader->SetUniform("uMaterial.emmisiveIntensity", material->emmisiveIntensity);
             shader->SetUniform("uMaterial.emmisiveColor", material->emmisiveColor);
         }
@@ -534,12 +592,35 @@ namespace Engine {
 
     // ========== Drawing ==========
 
-    void Renderer::DrawOpaque() {
-        glEnable(GL_DEPTH_TEST);
-        glDepthMask(GL_TRUE);
-        glDepthFunc(GL_LESS);
-        glDisable(GL_BLEND);
+    void Renderer::DrawDepthPrepass() {
+        m_depthPrepassShader->Enable();
+        m_depthPrepassShader->SetUniform("uProjView", m_projViewMatrix);
 
+        for (const auto& [key, batch] : m_opaqueBatches) {
+            if (batch.modelMatrices.size() == 1) {
+                // Single object - standard draw
+                m_depthPrepassShader->SetUniform("uModel", batch.modelMatrices[0]);
+                m_depthPrepassShader->SetUniform("uUseInstancing", false);
+                glBindVertexArray(key.mesh->vao);
+                glDrawElements(GL_TRIANGLES, key.mesh->indicesCount, GL_UNSIGNED_INT, 0);
+            }
+            else {
+                /// Multiple objects - prepare an SSBO and do an instanced draw
+                // Fill SSBO with data
+                glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_instanceSSBO);
+                glBufferData(GL_SHADER_STORAGE_BUFFER, batch.modelMatrices.size() * sizeof(mat4), batch.modelMatrices.data(), GL_DYNAMIC_DRAW);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_instanceSSBO);
+                SetLightUniforms(m_depthPrepassShader.get());
+
+                // Draw our stuff
+                m_depthPrepassShader->SetUniform("uUseInstancing", true);
+                glBindVertexArray(key.mesh->vao);
+                glDrawElementsInstanced(GL_TRIANGLES, key.mesh->indicesCount, GL_UNSIGNED_INT, 0, batch.modelMatrices.size());
+            }
+        }
+    }
+
+    void Renderer::DrawOpaque() {
         m_stats.batchCount = m_opaqueBatches.size();
 
         for (const auto& [key, batch] : m_opaqueBatches) {
@@ -561,9 +642,9 @@ namespace Engine {
             else {
                 /// Multiple objects - prepare an SSBO and do an instanced draw
                 // Fill SSBO with data
-                glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssbo);
+                glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_instanceSSBO);
                 glBufferData(GL_SHADER_STORAGE_BUFFER, batch.modelMatrices.size() * sizeof(mat4), batch.modelMatrices.data(), GL_DYNAMIC_DRAW);
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_ssbo);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_instanceSSBO);
 
                 // Draw our stuff
                 shader->SetUniform("uUseInstancing", true);
@@ -583,11 +664,6 @@ namespace Engine {
                 return a.distanceToCamera > b.distanceToCamera;
         });
 
-        // Enable blending
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glDepthMask(GL_FALSE);  // Don't write to depth buffer
-
         for (const DrawCommand& cmd : m_transparentQueue) {
             Shader* shader = cmd.material->shader.get();
             shader->Enable();
@@ -602,10 +678,6 @@ namespace Engine {
             cmd.mesh->Draw();
             m_stats.drawCalls++;
         }
-
-        // Restore state
-        glDepthMask(GL_TRUE);
-        glDisable(GL_BLEND);
     }
 
     // ========== Framebuffer Management ==========
@@ -641,17 +713,7 @@ namespace Engine {
     }
 
     void Renderer::BeginFramebufferPass() {
-        // glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
         m_Framebuffer->Bind();
-        // glEnable(GL_FRAMEBUFFER_SRGB);
-
-        // Clear this framebuffer
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        Window& window = Application::Get().GetWindow();
-        /*if (m_framebufferWidth != window.GetWidth() || m_framebufferHeight != window.GetHeight())
-            ResizeFramebuffer(window.GetWidth(), window.GetHeight());*/
-        // glViewport managed outside
     }
 
     void Renderer::EndFramebufferPass() {
@@ -661,6 +723,10 @@ namespace Engine {
 
         glBindVertexArray(0);
         glEnable(GL_DEPTH_TEST);
+    }
+
+    void Renderer::SetClearColor(const Color clearColor) {
+        m_glState.clearColor = clearColor;
     }
 
     void Renderer::RunPostProcessPipeline() {
@@ -718,7 +784,6 @@ namespace Engine {
         glBindTexture(GL_TEXTURE_2D, m_Framebuffer->GetColorAttachment()->id);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m_postProcessPongFBO[!horizontal ? 1 : 0]->GetColorAttachment(0)->id); // Final blurred result
-        // glBindTexture(GL_TEXTURE_2D, m_brightPassTexture);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDisable(GL_DEPTH_TEST);

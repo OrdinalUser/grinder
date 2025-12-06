@@ -162,15 +162,21 @@ namespace Engine {
             );
         }
 
+        std::shared_ptr<Shader> GetEmmisiveShader() {
+            return Application::Get().GetResourceSystem()->load<Shader>(
+                Application::Get().GetVFS()->GetEngineResourcePath("assets/shaders/emmisive")
+            );
+        }
+
         std::shared_ptr<Shader> GetLitShader() {
             return Application::Get().GetResourceSystem()->load<Shader>(
-                Application::Get().GetVFS()->GetEngineResourcePath("assets/shaders/lit")
+                Application::Get().GetVFS()->GetEngineResourcePath("assets/shaders/lighting_lit")
             );
         }
 
         std::shared_ptr<Shader> GetTexturedShader() {
             return Application::Get().GetResourceSystem()->load<Shader>(
-                Application::Get().GetVFS()->GetEngineResourcePath("assets/shaders/textured")
+                Application::Get().GetVFS()->GetEngineResourcePath("assets/shaders/lighting_textured")
             );
         }
     };
@@ -279,8 +285,8 @@ namespace Engine {
         auto shader = std::make_shared<Shader>();
 
         // Build shader file paths
-        auto vertPath = path.string() + "_vert.glsl";
-        auto fragPath = path.string() + "_frag.glsl";
+        auto vertPath = cfg.vertex_shader_filepath.has_value() ? path / cfg.vertex_shader_filepath.value() : path.string() + "_vert.glsl";
+        auto fragPath = cfg.fragment_shader_filepath.has_value() ? path / cfg.fragment_shader_filepath.value() : path.string() + "_frag.glsl";
 
         // Read shader source files
         std::string vertCode = readFile(vertPath);
@@ -570,15 +576,20 @@ namespace Engine {
                 shininess = SHININESS_DEFAULT;
             material.shininess = shininess;
 
+            bool isEmmisive = false;
             constexpr float EMMISIVE_INTENSITY_DEFAULT = 0.0f;
             float emmisiveIntensity = EMMISIVE_INTENSITY_DEFAULT;
-            if (AI_SUCCESS != mat->Get(AI_MATKEY_EMISSIVE_INTENSITY, emmisiveIntensity))
-                emmisiveIntensity = EMMISIVE_INTENSITY_DEFAULT;
+            if (AI_SUCCESS == mat->Get(AI_MATKEY_EMISSIVE_INTENSITY, emmisiveIntensity)) {
+                isEmmisive = true;
+            }
             material.emmisiveIntensity = emmisiveIntensity;
 
+
             aiColor3D emmisiveColor{ 0.0f, 0.0f, 0.0f };
-            if (AI_SUCCESS != mat->Get(AI_MATKEY_COLOR_EMISSIVE, emmisiveColor))
-                emmisiveColor = aiColor3D{0.0f, 0.0f, 0.0f };
+            if (AI_SUCCESS == mat->Get(AI_MATKEY_COLOR_EMISSIVE, emmisiveColor)) {
+                if (emmisiveColor.r != 0 || emmisiveColor.g != 0 || emmisiveColor.g != 0)
+                    isEmmisive = true;
+            }
             material.emmisiveColor = vec3(emmisiveColor.r, emmisiveColor.g, emmisiveColor.b);
 
             // ========== Determine transparency ==========
@@ -603,7 +614,11 @@ namespace Engine {
             // ========== Classify material type (highest wins) ==========
             bool hasAnyTexture = diffuseTex.has_value() || specularTex.has_value() || normalTex.has_value();
 
-            if (hasAnyTexture) {
+            if (isEmmisive) {
+                material.renderType = Material::RenderType::EMMISIVE;
+                material.shader = DefaultAssets::GetEmmisiveShader();
+            }
+            else if (hasAnyTexture) {
                 material.renderType = Material::RenderType::TEXTURED;
                 material.shader = DefaultAssets::GetTexturedShader();
             }
@@ -878,7 +893,7 @@ namespace Engine {
             min = glm::min(min, v.position);
             max = glm::max(max, v.position);
         }
-        bbox = { .min = min, .max = max };
+        bbox = BBox{ min, max };
         // vec3 center = (min + max) * 0.5f;
         vec3 center = bbox.center();
         float radius = glm::length(max - center);
@@ -998,4 +1013,7 @@ namespace Engine {
         }
     }
 
+    bool Shader::HasUniform(const std::string& name) const {
+        return m_CacheLoc.contains(name);
+    }
 }

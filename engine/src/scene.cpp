@@ -49,6 +49,7 @@ namespace Engine {
 
 	Scene::~Scene() {
 		Shutdown();
+		m_initialized = false;
 		auto vfs = Application::Get().GetVFS();
 		vfs->DeleteResourcePath(m_name);
 
@@ -76,7 +77,8 @@ namespace Engine {
 	}
 
 	void Scene::Shutdown() const {
-		 m_shutdown_f();
+		if (m_initialized)
+			m_shutdown_f();
 	}
 
 	void Scene::Reload() {

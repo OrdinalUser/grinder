@@ -10,12 +10,10 @@ namespace Engine {
     public:
         enum class TextureFormat : u32 {
             None = 0,
-            // Color
             RGB = GL_RGB,
             RGBA = GL_RGBA8,
-            RGBA16F = GL_RGBA16F, // Perfect for HDR / Bloom
+            RGBA16F = GL_RGBA16F,
             Color = RGBA16F,
-            // Depth
             DEPTH24_STENCIL8 = GL_DEPTH24_STENCIL8,
             Depth = DEPTH24_STENCIL8
         };
@@ -42,28 +40,19 @@ namespace Engine {
         };
 
     public:
-        // Takes the initial size.
         Framebuffer(uint32_t width, uint32_t height);
         ~Framebuffer();
 
-        // --- Builder Methods ---
-        // Add an attachment by describing its format.
         Framebuffer& AddColorAttachment(const AttachmentSpecification& spec = { });
         Framebuffer& SetDepthAttachment(const AttachmentSpecification& spec = { .Format = TextureFormat::Depth });
 
-        // --- Finalization ---
-        // Creates all the OpenGL objects based on the attachments added.
-        // Throws an exception on failure.
         void Build();
 
-        // --- Usage ---
         inline void Bind() const;
         inline void Unbind() const;
 
-        // Recreates the FBO with a new size, preserving the attachment configuration.
         void Resize(uint32_t width, uint32_t height);
 
-        // --- Accessors ---
         std::shared_ptr<Texture> GetColorAttachment(uint32_t index = 0) const;
         std::shared_ptr<Texture> GetDepthAttachment() const;
 
@@ -71,19 +60,21 @@ namespace Engine {
         inline uint32_t GetHeight() const { return m_Height; }
 
     private:
-        void Invalidate(); // The internal build/re-build logic
-        void Release();    // The internal cleanup logic
+        void Invalidate();
+        void Release();
 
         uint32_t m_FramebufferID = 0;
         uint32_t m_Width, m_Height;
 
-        // The "recipes" for our attachments, stored from the builder calls
         std::vector<AttachmentSpecification> m_ColorAttachmentSpecs;
         std::optional<AttachmentSpecification> m_DepthAttachmentSpec;
 
-        // The actual Texture objects created in Build()
         std::vector<std::shared_ptr<Texture>> m_ColorAttachments;
         std::shared_ptr<Texture> m_DepthAttachment;
+    };
+
+    struct GlState {
+        Color clearColor = Color(0.00455, 0.00455, 0.00455, 1.0);
     };
 
     class Renderer {
@@ -101,10 +92,11 @@ namespace Engine {
         ENGINE_API void Clear();
         ENGINE_API void OnResize(unsigned int width, unsigned int height);
 
+        ENGINE_API void SetClearColor(const Color clearColor);
+
         ENGINE_API Renderer();
         ENGINE_API ~Renderer();
 
-        // Debug stats
         struct Stats {
             size_t drawCalls = 0;
             size_t instancedDrawCalls = 0;
@@ -116,12 +108,9 @@ namespace Engine {
         ENGINE_API const std::list<Stats>& GetStats() const { return m_Stats; }
 
     private:
-        // ========== Data Structures ==========
-
         struct ComputeShader {
             ComputeShader(const std::filesystem::path& filepath);
             ~ComputeShader();
-
             unsigned int program;
         };
 
@@ -129,7 +118,7 @@ namespace Engine {
             Transform* transform;
             Mesh* mesh;
             Material* material;
-            float distanceToCamera;  // For transparency sorting
+            float distanceToCamera;
         };
 
         struct BatchKey {
@@ -138,9 +127,7 @@ namespace Engine {
             Shader* shader;
 
             bool operator==(const BatchKey& other) const {
-                return mesh == other.mesh &&
-                    material == other.material &&
-                    shader == other.shader;
+                return mesh == other.mesh && material == other.material && shader == other.shader;
             }
         };
 
@@ -159,99 +146,99 @@ namespace Engine {
             std::vector<mat4> modelMatrices;
         };
 
-        struct LightData {
-            Light::Type type;
-            vec3 color;
-            float intensity;
-
-            vec3 position;     // Point & Spot
-            vec3 direction;    // Directional & Spot
-
-            float range;       // Point & Spot
-            float innerCutoff; // Spot
-            float outerCutoff; // Spot
-        };
-
-        // GPU sided struct
-        struct GPU_InstanceData {
-            mat4 modelMatrix;
-            BSphere bSphere;
-        };
-
-        struct GPUInstance {
+        struct DrawInstance {
             Transform* transform;
             Mesh* mesh;
             Material* material;
         };
 
-        // Frustum planes (extracted from projView matrix)
         struct Frustum {
-            vec4 planes[6]; // left, right, bottom, top, near, far
+            vec4 planes[6];
         } m_frustum;
 
-        // ========== State ==========
+        // GPU Light Data, std 430 aligned
+        struct GPU_LightData {
+            vec4 positionAndType;
+            vec4 directionAndRange;
+            vec4 colorAndIntensity;
+            vec4 spotAnglesRadians;
+        };
+
+        struct GPU_InstanceData {
+            mat4 modelMatrix;
+            BSphere bSphere;
+        };
 
         // Camera
         Transform* m_cameraTransform = nullptr;
         Camera* m_camera = nullptr;
         mat4 m_projViewMatrix;
         vec3 m_cameraPosition;
+        vec3 m_cameraForward;
         bool m_hasCameraSet = false;
 
         // Render queues
-        std::vector<GPUInstance> m_gpuInstances;
+        std::vector<DrawInstance> m_gpuInstances;
         std::vector<GPU_InstanceData> m_gpuInstanceData;
-
         std::unordered_map<BatchKey, InstanceBatch, BatchKeyHash> m_opaqueBatches;
         std::vector<DrawCommand> m_transparentQueue;
 
-        // Light queue
-        std::vector<std::pair<Transform*, Light*>> m_queuedLights;
-        std::vector<LightData> m_processedLights;
-
-        // Framebuffer
+        // Main render buffer
         Framebuffer* m_Framebuffer;
+
+        // Post-process framebuffers
         Framebuffer* m_postProcessPongFBO[2];
         Framebuffer* m_postProcessBrightFBO;
 
         GLuint m_screenQuadVAO = 0;
         GLuint m_screenQuadVBO = 0;
-        
-        // Batching & instancing
-        ComputeShader* m_cullShader;
-        GLuint m_ssbo = 0;
 
+        // Culling
+        ComputeShader* m_cullShader;
+        GLuint m_instanceSSBO = 0;
         GLuint m_instancesSSBO;
         GLuint m_visibilitySSBO;
         GLuint m_frustumUBO;
 
-        // Post-processing
+        // Tiled Deferred Light Processing
+        std::vector<std::pair<Transform*, Light*>> m_queuedLights;
+        std::vector<GPU_LightData> m_processedLights;
+        ComputeShader* m_lightCullShader;
+        GLuint m_lightsSSBO;
+        GLuint m_lightGridSSBO;
+        GLuint m_lightIndicesSSBO;
+
+        // Shaders
         std::shared_ptr<Shader> m_postProcessingShader;
         std::shared_ptr<Shader> m_brightPassShader;
         std::shared_ptr<Shader> m_blurShader;
+        std::shared_ptr<Shader> m_depthPrepassShader;
 
         // Stats
         Stats m_stats;
         std::list<Stats> m_Stats;
 
-        // ========== Private Methods ==========
+        // Other
+        GlState m_glState;
 
+        // Private helper methods
         void ProcessLights();
-        void SetLightUniforms(Shader* shader);
+
         void SetCommonUniforms(Shader* shader);
+        void SetLightUniforms(Shader* shader);
         void SetMaterialUniforms(Material* material);
 
+        void DrawDepthPrepass();
         void DrawOpaque();
         void DrawTransparent();
 
         void CreateScreenQuad();
-
         void ExtractFrustumPlanes();
         bool IsBoxInFrustum(const BBox& bbox, const mat4& modelMatrix) const;
         void ProcessQueue();
 
         void BeginFramebufferPass();
-        void EndFramebufferPass();
         void RunPostProcessPipeline();
+        void EndFramebufferPass();
     };
 }

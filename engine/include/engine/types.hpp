@@ -24,6 +24,7 @@
 #include <tuple>
 #include <iterator>
 #include <filesystem>
+#include <random>
 
 namespace Engine {
     namespace Math {
@@ -38,6 +39,7 @@ namespace Engine {
     using vec2 = Math::vec2;
     using vec3 = Math::vec3;
     using vec4 = Math::vec4;
+    using mat3 = Math::mat3;
     using mat4 = Math::mat4;
     using quat = Math::quat;
 
@@ -108,13 +110,16 @@ namespace Engine {
         f32 r = 1.f, g = 1.f, b = 1.f, a = 1.f;
         
         constexpr Color() = default;
-        constexpr Color(f32 r, f32 g, f32 b, f32 a = 1.f)
+        constexpr Color(vec4 vec)
+            : r(vec.r), g(vec.g), b(vec.b), a(vec.a) {}
+        constexpr Color(f32 r, f32 g, f32 b, f32 a = 1.0f)
             : r(r), g(g), b(b), a(a) {}
+        constexpr Color(f64 r, f64 g, f64 b, f64 a = 1.0)
+            : r(static_cast<float>(r)), g(static_cast<float>(g)), b(static_cast<float>(b)), a(static_cast<float>(a)) {}
         constexpr Color(u8 r, u8 g, u8 b, u8 a = 255)
-            : r{r/255.0f}, g{g/255.0f}, b{b/255.0f}, a{a/255.0f} {}
+            : r{ r/255.0f }, g{ g/255.0f }, b{ b/255.0f }, a{ a/255.0f } {}
         constexpr Color(i32 r, i32 g, i32 b, i32 a = 255)
-            : r{ r / 255.0f }, g{ g / 255.0f }, b{ b / 255.0f }, a{ a / 255.0f } {
-        }
+            : r{ r/255.0f }, g{ g/255.0f }, b{ b/255.0f }, a{ a/255.0f } {}
         constexpr glm::vec4 to_vec4() const noexcept { return { r, g, b, a }; }
 
         constexpr Color(const Color&) = default;
@@ -199,17 +204,19 @@ namespace Engine {
 
             // Point & Spot light properties
             float range = 10.0f;  // max distance before full attenuation
+            vec3 direction = vec3(0.0f, 0.0f, 0.0f);
 
             // Spot light properties
-            float innerCutoffDegrees = 12.5f;  // inner cone
-            float outerCutoffDegrees = 17.5f;  // outer cone (for smooth falloff)
+            float innerCutoffRadians = 0.0f;  // inner cone (12.5 degrees)
+            float outerCutoffRadians = 0.0f;  // outer cone (for smooth falloff) (17.5 degrees)
 
             // Helper functions for common light types
-            static Light Directional(vec3 color = vec3(1.0f), float intensity = 1.0f) {
+            static Light Directional(vec3 color = vec3(1.0f), float intensity = 1.0f, vec3 direction = vec3(0.0f, -1.0f, 0.0f)) {
                 Light l;
                 l.type = Type::DIRECTIONAL;
                 l.color = color;
                 l.intensity = intensity;
+                l.direction = glm::normalize(direction);
                 return l;
             }
 
@@ -226,8 +233,8 @@ namespace Engine {
                 float range = 10.0f, vec3 color = vec3(1.0f), float intensity = 1.0f) {
                 Light l;
                 l.type = Type::SPOT;
-                l.innerCutoffDegrees = innerDegrees;
-                l.outerCutoffDegrees = outerDegrees;
+                l.innerCutoffRadians = glm::radians(innerDegrees);
+                l.outerCutoffRadians = glm::radians(outerDegrees);
                 l.range = range;
                 l.color = color;
                 l.intensity = intensity;
@@ -244,6 +251,12 @@ namespace Engine {
             mat4 viewMatrix = mat4(1.0f);
             mat4 projectionMatrix = mat4(1.0f);
 
+            // New attributes for easy access
+            float fov = 60.0f;
+            float aspect_ratio = 16.0f / 9.0f;
+            float nearPlane = 0.1f;
+            float farPlane = 300.0f;
+
             // Create a perspective camera
             static Camera Perspective(
                 float fovDegrees = 60.0f,
@@ -254,30 +267,26 @@ namespace Engine {
             ) {
                 Camera cam;
                 cam.isMain = main;
+                cam.fov = fovDegrees;
+                cam.aspect_ratio = aspect;
+                cam.nearPlane = nearPlane;
+                cam.farPlane = farPlane;
                 cam.projectionMatrix = glm::perspective(glm::radians(fovDegrees), aspect, nearPlane, farPlane);
                 return cam;
             }
 
-            // Create an orthographic camera
-            static Camera Ortho(
-                float left = -10.0f,
-                float right = 10.0f,
-                float bottom = -10.0f,
-                float top = 10.0f,
-                float nearPlane = 0.1f,
-                float farPlane = 100.0f,
-                bool main = false
-            ) {
-                Camera cam;
-                cam.isMain = main;
-                cam.projectionMatrix = glm::ortho(left, right, bottom, top, nearPlane, farPlane);
-                return cam;
-            }
-
             // Helper to set view matrix from position and target
-            void LookAt(const vec3& position, const vec3& target = vec3(0, 0, 0), const vec3& up = vec3(0, 1, 0)) {
+            inline void LookAt(const vec3& position, const vec3& target = vec3(0, 0, 0), const vec3& up = vec3(0, 1, 0)) {
                 viewMatrix = glm::lookAt(position, target, up);
             }
+
+            // Getters for easy access
+            inline float GetFOV() const { return fov; }
+            inline float GetAspectRatio() const { return aspect_ratio; }
+            inline float GetNearPlane() const { return nearPlane; }
+            inline float GetFarPlane() const { return farPlane; }
+            inline mat4 GetProjectionMatrix() const { return projectionMatrix; }
+            inline mat4 GetViewMatrix() const { return viewMatrix; }
         };
     }
 
@@ -285,6 +294,8 @@ namespace Engine {
         glm::vec3 min;
         glm::vec3 max;
 
+        BBox() : min{ 0 }, max{ 0 } {}
+        BBox(const vec3 min, const vec3 max) : min{ min }, max{ max } {}
         glm::vec3 center() const { return (min + max) * 0.5f; }
         glm::vec3 size() const { return max - min; }
         glm::vec3 extents() const { return size() * 0.5f; }  // Half-size

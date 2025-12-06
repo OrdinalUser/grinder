@@ -23,15 +23,17 @@ namespace Engine {
 
 	void Application::Run() {
 		// Default GL state variables
-		glClearColor(1.0f, 1.0f, 1.0f, 1); // CHANGE: Gamma corrected values
-		glEnable(GL_DEPTH_TEST);
-
 		using clock = std::chrono::steady_clock;
 		auto lastTime = clock::now();
 		float accumulator = 0.0f;
 		constexpr float fixedDelta = 1.0f / 50.0f; // 50 Hz fixed update
 		
+		// Run one tick so transforms are correct after initialization
+		vector<entity_id> updatedEntities = m_Ecs->GetSystem<TransformSystem>()->Update(fixedDelta).value_or(std::vector<entity_id>());
+		m_Ecs->GetSystem<TransformSystem>()->PostUpdate();
+
 		while (m_Running) {
+			PERF_BEGIN("Time_Full");
 			if (glfwWindowShouldClose(m_Window->GetNativeWindow()))
 				m_Running = false;
 
@@ -74,6 +76,7 @@ namespace Engine {
 			PERF_END("Render_Total");
 
 			m_Window->OnUpdate();
+			PERF_END("Time_Full");
 		}
 	}
 

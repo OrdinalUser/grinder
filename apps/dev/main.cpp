@@ -13,7 +13,7 @@
 using namespace Engine;
 using namespace Engine::Component;
 
-entity_id car = null, camera = null;
+entity_id entity_model = null, camera = null, ring = null, sun = null;
 Camera* camComp = nullptr;
 Ref<ECS> ecs;
 Ref<VFS> vfs;
@@ -31,17 +31,61 @@ void scene_init(scene_data_t scene_data) {
     auto& cam = ecs->AddComponent<Camera>(camera, Camera::Perspective());
     cam.isMain = true;
     camComp = &cam;
+    // Light camera_light = Light::Spot(12.5, 17.5, 50, vec3{ 1 }, 1);
+    // ecs->AddComponent<Light>(camera, camera_light);
 
     // Load and instantiate our 3D model
     LoadCfg::Model modelConf;
     modelConf.normalize = true;
 
-    Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/car_expo.glb"), LoadCfg::Model{});
-    car = ecs->Instantiate(null, Component::Transform(), model);
+    Ref<Model> model = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Police Car.glb"));
+    entity_model = ecs->Instantiate(null, Component::Transform(), model);
+
+    Component::Transform t{};
+    t.position = { 10, 0, 0 }; ecs->Instantiate(null, t, model);
+    t.position = { -10, 0, 0 }; ecs->Instantiate(null, t, model);
+
+    //// Add sun
+    sun = ecs->CreateEntity3D(null, Transform(), "Sun");
+    Light sun_light = Light::Directional(Color(255, 0, 0).to_vec4(), 1.0f, {-0.4, -1.0, -0.4});
+    // ecs->AddComponent<Light>(sun, sun_light);
+
+    //// Create a ring of lights around our model
+    Ref<Model> model_light = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/cube.glb"));
+    ring = ecs->CreateEntity3D(null, Transform(), "Light Ring");
+    // Add lights into the ring
+    constexpr float light_ring_radius = 30.0f;
+    constexpr size_t light_count = 16;
+    constexpr vec3 light_color{ 1.0f };
+    constexpr float light_intensity = 0.4f;
+    constexpr float light_range = 10.0f;
+
+    for (size_t i = 0; i < light_count; i++) {
+        float angle_deg = 360.0f / (static_cast<float>(light_count) / i);
+        vec2 pos = {
+            Math::cos(glm::radians(angle_deg)) * light_ring_radius - (rand() % 150 / 100.0f),
+            Math::sin(glm::radians(angle_deg)) * light_ring_radius - (rand() % 150 / 100.0f)
+        };
+        Transform t{};
+        t.position = vec3(pos.x, (rand() % 200 / 100.0f) - 1.0f, pos.y);
+        t.scale = vec3{ 0.25f };
+        entity_id e = ecs->Instantiate(ring, t, model_light);
+        Light light = Light::Point(
+            light_range, light_color, light_intensity
+        );
+        ecs->AddComponent<Light>(e, light);
+    }
 }
 
 void scene_update_fixed(float deltaTime) {
-    return;
+    static float angle = 0.0f;
+    constexpr float ROTATION_SPEED = 0.025f;
+    angle += ROTATION_SPEED * deltaTime;
+
+    // Rotate the light ring
+    auto ring_transform = ecs->GetTransformRef(ring);
+    ring_transform.RotateAround({ 0, 1, 0 }, glm::radians(angle));
+    ring_transform.SetScale(glm::max(glm::abs(vec3(glm::cos(angle*10.0), 1, glm::cos(angle*10.0))), 0.1f));
 }
 
 void scene_update(float deltaTime) {
@@ -50,20 +94,12 @@ void scene_update(float deltaTime) {
     constexpr float ROTATION_SPEED = 0.25f;
     angle += ROTATION_SPEED * deltaTime;
 
-    constexpr float radius = 2.5f;
+    constexpr float radius = 25.0f;
     auto trans = ecs->GetTransformRef(camera);
     float camX = radius * cos(angle);
     float camZ = radius * sin(angle);
     trans.SetPosition(vec3(camX, 1, camZ));
     camComp->LookAt(trans.GetPosition());
-
-    // Rotate car wheels
-    constexpr float WHEEL_ROTATION_SPEED = 5.0f;
-    auto ecs = Application::Get().GetECS();
-    for (entity_id child : ChildrenRange(ecs.get(), car)) {
-        auto transformRef = ecs->GetTransformRef(child);
-        transformRef.RotateAround({ 0.0f, 1.0f, 0.0f }, glm::radians(WHEEL_ROTATION_SPEED * deltaTime));
-    }
 }
 
 void scene_render() {
@@ -72,8 +108,9 @@ void scene_render() {
 
 void scene_shutdown() {
     ecs->DestroyEntity(camera);
-    ecs->DestroyEntity(car, true);
-    return;
+    ecs->DestroyEntity(sun);
+    ecs->DestroyEntity(entity_model, true);
+    ecs->DestroyEntity(ring, true);
 }
 
 //// Many entities test

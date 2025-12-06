@@ -91,6 +91,9 @@ namespace Engine {
 			AddComponent(id, Component::Name{ .name = name });
 		}
 
+		// Enqueue for update, since user will most likely modify entity
+		GetSystem<TransformSystem>()->Enqueue(id);
+
 		return id;
 	}
 
@@ -307,7 +310,8 @@ namespace Engine {
 			// Combine blueprint transform with the instantiation root if this is the root node
 			Component::Transform worldTransform = bp.transform;
 			if (bp.parent == null) {
-				worldTransform.modelMatrix = rootTransform.modelMatrix * worldTransform.modelMatrix;
+				// worldTransform.modelMatrix = rootTransform.modelMatrix * worldTransform.modelMatrix;
+				worldTransform = rootTransform;
 			}
 
 			// Create entity; if node has a parent, use the parent's entity id
@@ -532,4 +536,70 @@ namespace Engine {
 		return data.Up();
 	}
 
+	const mat4& RefTransform::GetModelMatrix() const {
+		return data.modelMatrix;
+	}
+
+	vec3 RefTransform::GetWorldPosition() const {
+		return vec3(GetModelMatrix()[3]);
+	}
+
+	quat RefTransform::GetWorldRotation() const {
+		mat4 model = GetModelMatrix();
+		mat3 rotationMat = mat3(model);
+		// Remove scale by normalizing basis vectors
+		vec3 right = normalize(vec3(model[0]));
+		vec3 up = normalize(vec3(model[1]));
+		vec3 forward = normalize(vec3(model[2]));
+		rotationMat = mat3(right, up, forward);
+		return quat_cast(rotationMat);
+	}
+
+	// Get world space forward direction
+	vec3 RefTransform::WorldForward() const {
+		return normalize(vec3(GetModelMatrix()[2])); // Z column
+	}
+
+	// Get world space right direction  
+	vec3 RefTransform::WorldRight() const {
+		return normalize(vec3(GetModelMatrix()[0])); // X column
+	}
+
+	// Get world space up direction
+	vec3 RefTransform::WorldUp() const {
+		return normalize(vec3(GetModelMatrix()[1])); // Y column
+	}
+
+	mat4 RefTransform::GetParentModelMatrix() const {
+		Component::Hierarchy hierarchy = ecs.GetComponent<Component::Hierarchy>(id);
+		return ecs.GetTransformRef(hierarchy.parent).GetModelMatrix();
+	}
+
+	quat RefTransform::GetParentWorldRotation() const {
+		Component::Hierarchy hierarchy = ecs.GetComponent<Component::Hierarchy>(id);
+		return ecs.GetTransformRef(hierarchy.parent).GetWorldRotation();
+	}
+
+	bool RefTransform::HasParent() const {
+		Component::Hierarchy hierarchy = ecs.GetComponent<Component::Hierarchy>(id);
+		return hierarchy.parent != null;
+	}
+
+	void RefTransform::LookAtWorld(const vec3& worldTarget, const vec3& worldUp) {
+		vec3 worldPos = GetWorldPosition();
+		mat4 lookAtMatrix = glm::lookAt(worldPos, worldTarget, worldUp);
+		mat3 rotationMat = inverse(mat3(lookAtMatrix)); // lookAt gives view matrix, need inverse for model
+
+		quat worldRotation = quat_cast(rotationMat);
+
+		// Convert world rotation to local space if we have a parent
+		if (HasParent()) {
+			quat parentWorldRotation = GetParentWorldRotation();
+			quat localRotation = inverse(parentWorldRotation) * worldRotation;
+			SetRotation(localRotation);
+		}
+		else {
+			SetRotation(worldRotation);
+		}
+	}
 } // namespace Engine

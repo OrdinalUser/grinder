@@ -1,4 +1,5 @@
 #pragma once
+
 #include <engine/api.hpp>
 #include <engine/types.hpp>
 #include <engine/exception.hpp>
@@ -39,6 +40,8 @@ namespace Engine {
         ENGINE_API void SetUniform(const std::string& name, const Texture& tex, const TextureSlot slot) const;
         ENGINE_API void SetUniform(const Material& v) const;
 
+        ENGINE_API bool HasUniform(const std::string& name) const;
+
         ENGINE_API void Enable();
         ENGINE_API ~Shader();
     private:
@@ -72,7 +75,7 @@ namespace Engine {
 
     struct Material : IResource {
         enum class RenderType : u8 {
-            UNLIT, LIT, TEXTURED
+            UNLIT, LIT, TEXTURED, EMMISIVE
         };
 
         glm::vec3 diffuseColor{ 1.0f };
@@ -223,7 +226,8 @@ namespace Engine {
         };
 
         struct Shader {
-            bool unused = false;
+            optional<path> vertex_shader_filepath = std::nullopt;
+            optional<path> fragment_shader_filepath = std::nullopt;
         };
     }
 

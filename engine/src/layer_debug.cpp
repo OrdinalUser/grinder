@@ -159,7 +159,7 @@ namespace Engine {
 							}
                             else if (auto material = std::dynamic_pointer_cast<Material>(resource)) {
                                 constexpr const char* RENDER_TYPES_STR[] = {
-                                    "UNLIT", "LIT", "TEXTURED"
+                                    "UNLIT", "LIT", "TEXTURED", "EMMISIVE"
                                 };
 
                                 ImGui::Text("Shader Program ID: %u", material->shader->program);
@@ -170,8 +170,17 @@ namespace Engine {
                                     ImGui::Text("Diffuse color: %.2f %.2f %.2f", material->diffuseColor.r, material->diffuseColor.b, material->diffuseColor.b);
                                     ImGui::Text("Specular color: %.2f %.2f %.2f", material->specularColor.r, material->specularColor.b, material->specularColor.b);
                                     ImGui::Text("Shininess: %.2f", material->shininess);
+                                }
+                                if (material->renderType == Material::RenderType::EMMISIVE) {
                                     ImGui::Text("Emmisive Intensity: %.2f", material->emmisiveIntensity);
                                     ImGui::Text("Emmisive Color: %.2f %.2f %.2f", material->emmisiveColor.x, material->emmisiveColor.y, material->emmisiveColor.z);
+                                    {
+                                        auto tex = material->emmisive;
+                                        ImGui::Text("Emmisive:");
+                                        float aspect = (float)tex->width / (float)tex->height;
+                                        ImVec2 size(128, 128 / aspect);
+                                        ImGui::Image((void*)(intptr_t)tex->id, size, ImVec2(0, 1), ImVec2(1, 0));
+                                    }
                                 }
                                 if (material->renderType == Material::RenderType::TEXTURED) {
                                     {
@@ -191,13 +200,6 @@ namespace Engine {
                                     {
                                         auto tex = material->normal;
                                         ImGui::Text("Normal:");
-                                        float aspect = (float)tex->width / (float)tex->height;
-                                        ImVec2 size(128, 128 / aspect);
-                                        ImGui::Image((void*)(intptr_t)tex->id, size, ImVec2(0, 1), ImVec2(1, 0));
-                                    }
-                                    {
-                                        auto tex = material->emmisive;
-                                        ImGui::Text("Emmisive:");
                                         float aspect = (float)tex->width / (float)tex->height;
                                         ImVec2 size(128, 128 / aspect);
                                         ImGui::Image((void*)(intptr_t)tex->id, size, ImVec2(0, 1), ImVec2(1, 0));
@@ -549,6 +551,18 @@ namespace Engine {
                 ImGui::Text("Filepath: %s", drawable.model->m_path.string().c_str());
                 ImGui::Text("Collection: %u", drawable.collectionIndex);
                 ImGui::Unindent();
+            }
+        }
+
+        if (ecs->HasComponent<Component::Light>(entity)) {
+            auto& light = ecs->GetComponent<Component::Light>(entity);
+            if (ImGui::CollapsingHeader("Light", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Indent();
+                ImGui::Text("Type: %s", light.type == Component::Light::Type::POINT ? "Point" : light.type == Component::Light::Type::SPOT ? "Spot" : "Directional");
+                ImGui::Text("Color: %.2f %.2f %.2f", light.color.x, light.color.y, light.color.z);
+                ImGui::Text("Range: %.2f", light.range);
+                ImGui::Text("Intensity: %.2f", light.intensity);
+                ImGui::Text("Direction: %.2f %.2f %.2f", light.direction.x, light.direction.y, light.direction.z);
             }
         }
 

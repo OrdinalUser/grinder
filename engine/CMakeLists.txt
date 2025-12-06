@@ -1,4 +1,4 @@
-add_library(engine SHARED
+set(ENGINE_SOURCES
     src/init.cpp # contains initialization logic
     src/log.cpp # spdlog singleton wrapper
     src/exception.cpp # prettier exception recovery, uses log
@@ -12,6 +12,28 @@ add_library(engine SHARED
     src/layer.cpp # internal - layer stack implementation
     src/window.cpp # wraps glfw window minimally
     src/application.cpp # provdides application singleton
+)
+
+set(ENGINE_SOURCES_INCLUDES
+    include/engine/api.hpp
+    include/engine/application.hpp
+    include/engine/ecs.hpp
+    include/engine/engine.hpp
+    include/engine/exception.hpp
+    include/engine/layer.hpp
+    include/engine/log.hpp
+    include/engine/perf_profiler.hpp
+    include/engine/renderer.hpp
+    include/engine/resource.hpp
+    include/engine/scene_api.hpp
+    include/engine/scene.hpp
+    include/engine/types.hpp
+    include/engine/vfs.hpp
+    include/engine/window.hpp
+    include/engine/particle.hpp
+)
+
+set(LIBRARY_SOURCES
     # These are necessary for imgui, we are not graded for these!
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -22,6 +44,12 @@ add_library(engine SHARED
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
     # These are also necessary
     libs/glad/src/glad.c
+)
+
+add_library(engine SHARED
+    ${ENGINE_SOURCES}
+    ${ENGINE_SOURCES_INCLUDES}
+    ${LIBRARY_SOURCES}
 )
 
 target_include_directories(engine
@@ -44,3 +72,9 @@ target_link_libraries(engine
         opengl32
         backward
 )
+
+find_package(OpenMP REQUIRED)
+
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(engine PUBLIC OpenMP::OpenMP_CXX)
+endif()
