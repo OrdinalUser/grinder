@@ -402,7 +402,10 @@ public:
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 entity_id car = null, camera = null, big_H = null, small_H = null, grass = null, road = null, pummp = null,
 truck = null, police = null, firetruck = null, city_parent = null, tree = null, car2 = null, fire = null, fire_truck1 = null, fire_truck2 = null, tr = null, wheel_FR = null, wheel_FL = null, wheel_RR = null, wheel_RL = null;
+
 entity_id mainCarLightLeft = null, mainCarLightRight = null;
+
+entity_id policeLight = null,F1_light=null, F2_light = null;
 DirectionEstimator carDirectionEstimator;
 std::vector<entity_id> wheelEntities;
 Camera* camComp = nullptr;
@@ -520,15 +523,24 @@ public:
                     continue;
                 }
                 else if (tile == 4 && grassModel && trees) {
-                    // Instantiate small building model centered on this tile, occupying 3x3
+                    // Instantiate grass model
                     entity_id e = ecs->Instantiate(city_parent, Component::Transform(), grassModel);
                     auto ref = ecs->GetTransformRef(e);
                     ref.SetPosition({ worldX, 0.0f, worldZ });
                     ref.SetScale({ (tileSize / 2.0f), 0.05f, (tileSize / 2.0f) });
+
+                    // Instantiate tree with random rotation
                     entity_id i = ecs->Instantiate(e, Component::Transform(), trees);
                     auto ref1 = ecs->GetTransformRef(i);
-                    // ref1.SetPosition({ worldX, 0.0f, worldZ });
-                    ref1.SetScale({ tileSize / 2 , 20.0f, tileSize / 2 });
+
+                    // Generate random rotation around Y axis (0-360 degrees)
+                    static std::random_device rd;
+                    static std::mt19937 gen(rd());
+                    std::uniform_real_distribution<float> rotDist(0.0f, 2.0f * 3.14159f); // 0 to 2π radians
+                    float randomRotation = rotDist(gen);
+
+                    ref1.SetRotation(glm::angleAxis(randomRotation, glm::vec3(0.0f, 1.0f, 0.0f)));
+                    ref1.SetScale({ tileSize / 2, 20.0f, tileSize / 2 });
                     continue;
                 }
                 else if (tile == 0 && roadModel) {
@@ -843,6 +855,8 @@ Animator car2Animator;
 Animator fire1Anim;
 Animator fire2Anim;
 Animator cameraAnim;
+Animator redcolor;
+Animator bluecolor;
 // RainParticles rain;
 
 extern "C" {
@@ -1096,8 +1110,69 @@ extern "C" {
     }
 
 
+    void switchcolor(float globalTime) {
+        static bool red = true;  // Make it static to persist between calls
+        static float lastSwitchTime = 0.0f;  // Track when we last switched
 
+        // Switch every 0.5 seconds
+        if (globalTime - lastSwitchTime >= 0.2f) {
+            lastSwitchTime = globalTime;
 
+            // GetComponent returns a reference, so we can modify it directly
+            auto& light = ecs->GetComponent<Light>(policeLight);
+
+            if (red) {
+                light.color = vec3{ 0, 0, 1 };  // Blue
+                red = false;
+            }
+            else {
+                light.color = vec3{ 1, 0, 0 };  // Red
+                red = true;
+            }
+        }
+    }
+    void switchcolor_F1(float globalTime) {
+        static bool red = true;  // Make it static to persist between calls
+        static float lastSwitchTime = 0.0f;  // Track when we last switched
+
+        // Switch every 0.5 seconds
+        if (globalTime - lastSwitchTime >= 0.2f) {
+            lastSwitchTime = globalTime;
+
+            // GetComponent returns a reference, so we can modify it directly
+            auto& light = ecs->GetComponent<Light>(F1_light);
+
+            if (red) {
+                light.color = vec3{ 1, 1, 1 };  // Blue
+                red = false;
+            }
+            else {
+                light.color = vec3{ 1, 0, 0 };  // Red
+                red = true;
+            }
+        }
+    }
+    void switchcolor_F2(float globalTime) {
+        static bool red = true;  // Make it static to persist between calls
+        static float lastSwitchTime = 0.0f;  // Track when we last switched
+
+        // Switch every 0.5 seconds
+        if (globalTime - lastSwitchTime >= 0.2f) {
+            lastSwitchTime = globalTime;
+
+            // GetComponent returns a reference, so we can modify it directly
+            auto& light = ecs->GetComponent<Light>(F2_light);
+
+            if (red) {
+                light.color = vec3{ 1, 1, 1 };  // Blue
+                red = false;
+            }
+            else {
+                light.color = vec3{ 1, 0, 0 };  // Red
+                red = true;
+            }
+        }
+    }
     void scene_update(float deltaTime) {
         carDirectionEstimator.Integrate(ecs->GetTransformRef(car).GetPosition());
         quat mainCarLightRotation = carDirectionEstimator.Forward(); // Rotate to match our car estimated forward
@@ -1106,7 +1181,9 @@ extern "C" {
 
         fireExplosion.update(deltaTime);
         globalTime += deltaTime;
-
+        switchcolor(globalTime);
+        switchcolor_F1(globalTime);
+        switchcolor_F2(globalTime);
         auto wheel1 = ecs->GetTransformRef(wheel_FL);
         auto wheel2 = ecs->GetTransformRef(wheel_RR);
         auto wheel3 = ecs->GetTransformRef(wheel_RL);
@@ -1381,7 +1458,7 @@ extern "C" {
                     // CRASH - Start fire explosion and fire trucks
                     camMode = SPIN;
 
-                    fireExplosion.startFountain(glm::vec3(5.0f, 0.5f, -19.0f), 0.006f, 50);
+                    fireExplosion.startFountain(glm::vec3(5.0f, 0.5f, -19.0f), 0.01f, 10);
                     setupFireTrucksInitialMove();
                 }
             );
@@ -1547,11 +1624,11 @@ extern "C" {
         vfs = app.GetVFS();
         Ref<ResourceSystem> rs = app.GetResourceSystem();
         auto module_name = string(scene_data.module_name);
-        
+
         renderer->SetClearColor(Color{ 0.0, 0.0, 0.0, 1.0 });
 
         entity_id sun = ecs->CreateEntity3D(null, Transform(), "Sun");
-        Light sun_light = Light::Directional(Color(81, 81, 176).to_vec4(), 0.2f, {-0.4, -1.0, -0.4});
+        Light sun_light = Light::Directional(Color(81, 81, 176).to_vec4(), 0.2f, { -0.4, -1.0, -0.4 });
         ecs->AddComponent<Light>(sun, sun_light);
 
         shader = rs->load<Shader>(vfs->Resolve(module_name, "assets/color"));
@@ -1573,17 +1650,21 @@ extern "C" {
         carT.SetScale(glm::vec3(0.5, 0.5, 0.5));
 
         // Add lights to the main car just because
+
         quat defaultMainCarLightDirection = glm::angleAxis(glm::radians(-90.0f), vec3{1, 0, 0});
         constexpr vec3 mainCarLightLeftPos = vec3{ -0.45, 0.3, -0.2 };
         constexpr vec3 mainCarLightRightPos = vec3{ 0.3, 0.2, -0.45 };
         // left side: {-0.45, 0.3, -0.2}; right side: {0.3, 0.2, -0.45}
         mainCarLightLeft = ecs->CreateEntity3D(car, Transform{ .position = mainCarLightLeftPos });
         mainCarLightRight = ecs->CreateEntity3D(car, Transform{ .position = mainCarLightRightPos });
-        Light mainCarLightComp = Light::Spot(12.5, 17.5, 100, vec3{ 1 }, 100);
+        Light mainCarLightComp = Light::Spot(12.5, 17.5, 10, vec3{ 1 }, 10);
         ecs->AddComponent(mainCarLightLeft, mainCarLightComp);
         ecs->AddComponent(mainCarLightRight, mainCarLightComp);
+
+
         carDirectionEstimator.SetInitialDirection(glm::eulerAngles(defaultMainCarLightDirection));
         carDirectionEstimator.Integrate(carT.GetPosition());
+
 
         Ref<Model> model1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/tank.glb"));
         truck = ecs->Instantiate(null, Component::Transform(), model1);
@@ -1592,12 +1673,18 @@ extern "C" {
         truckT.SetScale({ 0.25f,0.25f,0.25f });
         Ref<Model> model_fire = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/fire.glb"));
         //fire = ecs->Instantiate(null, Component::Transform(), model_fire);
+
         Ref<Model> modelpolice = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Police Car.glb"));
         police = ecs->Instantiate(null, Component::Transform(), modelpolice);
         auto policeT = ecs->GetTransformRef(police);
         policeT.SetPosition({ 8.0f, 0.05f, 9.0f });
         policeT.SetScale({ 0.3f,0.3f,0.3f });
         policeT.SetRotation(glm::angleAxis(2 * 1.5708f, glm::vec3({ 0,1,0 })));
+
+        policeLight = ecs->CreateEntity3D(police, Transform{ .position = {0,1,0} });
+        Light majak = Light::Point(2, vec3{ 1, 0, 0 }, 1);
+        ecs->AddComponent(policeLight, majak);
+
         Ref<Model> model_car2 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/red_car.glb"));
         car2 = ecs->Instantiate(null, Component::Transform(), model_car2);
         auto car2T = ecs->GetTransformRef(car2);
@@ -1606,16 +1693,25 @@ extern "C" {
         Ref<Model> model_firetruck1 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Fire Truck.glb"));
         fire_truck1 = ecs->Instantiate(null, Component::Transform(), model_firetruck1);
         auto Ft1 = ecs->GetTransformRef(fire_truck1);
-        Ft1.SetPosition({ -4.0f, 0.0f, -31.0f }); // ← was 0.0f → keep 0.0f (already good)
+        Ft1.SetPosition({ -4.0f, 0.0f, -31.0f });
         Ft1.SetScale({ 1.5f,1.5f,1.5f });
         Ft1.SetRotation(glm::angleAxis(-1.5708f, glm::vec3({ 0,1,0 })));
+
+        F1_light = ecs->CreateEntity3D(fire_truck1, Transform{ .position = {0,1,0} });
+        Light majak2 = Light::Point(2, vec3{ 1, 0, 0 }, 1);
+        ecs->AddComponent(F1_light, majak2);
+
         Ref<Model> model_firetruck2 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Fire Truck.glb"));
         fire_truck2 = ecs->Instantiate(null, Component::Transform(), model_firetruck2);
         auto Ft2 = ecs->GetTransformRef(fire_truck2);
-        Ft2.SetPosition({ 20.0f, 0.0f, -15.0f }); // ← change from 0.0f → still 0.0f (or was 0.0f already)
+        Ft2.SetPosition({ 20.0f, 0.0f, -15.0f });
         Ft2.SetScale({ 1.5f,1.5f,1.5f });
         Ft2.SetRotation(glm::angleAxis(-1.5708f * 2, glm::vec3({ 0,1,0 })));
-        // Ref<Model> guy = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/Guy.glb"));
+
+        F2_light = ecs->CreateEntity3D(fire_truck2, Transform{.position = {0,1,0}});
+        Light majak3 = Light::Point(2, vec3{ 1, 0, 0 }, 1);
+        ecs->AddComponent(F2_light, majak3);
+
         Ref<Model> cityModel = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H1.glb"), LoadCfg::Model{ .static_mesh = false });
         city.bigModel1 = cityModel;
         Ref<Model> cityModel2 = rs->load<Model>(vfs->GetResourcePath(module_name, "assets/big_H3.glb"), LoadCfg::Model{ .static_mesh = true });
