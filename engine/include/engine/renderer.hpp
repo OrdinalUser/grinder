@@ -93,6 +93,8 @@ namespace Engine {
         ENGINE_API void OnResize(unsigned int width, unsigned int height);
 
         ENGINE_API void SetClearColor(const Color clearColor);
+        ENGINE_API void LoadSkybox(const path filepath, const std::string ext = ".png");
+        ENGINE_API void LoadSkybox(const array<std::filesystem::path, 6>& faces);
 
         ENGINE_API Renderer();
         ENGINE_API ~Renderer();
@@ -221,6 +223,12 @@ namespace Engine {
         // Other
         GlState m_glState;
 
+        // Skybox
+        GLuint m_skyboxVAO = 0;
+        GLuint m_skyboxVBO = 0;
+        std::shared_ptr<Shader> m_skyboxShader = nullptr;
+        GLuint m_skyboxCubemap = 0;
+
         // Private helper methods
         void ProcessLights();
 
@@ -240,5 +248,9 @@ namespace Engine {
         void BeginFramebufferPass();
         void RunPostProcessPipeline();
         void EndFramebufferPass();
+
+        void CreateSkybox();
+        GLuint LoadCubemap(const array<std::filesystem::path, 6>& faces);
+        void DrawSkybox();
     };
 }

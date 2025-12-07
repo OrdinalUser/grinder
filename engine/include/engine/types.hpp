@@ -12,6 +12,7 @@
 #include <string>
 #include <list>
 #include <vector>
+#include <array>
 #include <unordered_map>
 #include <queue>
 #include <memory>
@@ -70,6 +71,9 @@ namespace Engine {
 
     template<typename T>
     using vector = std::vector<T>;
+
+    template<typename T, size_t N>
+    using array = std::array<T, N>;
 
     template<typename T>
     using list = std::vector<T>;

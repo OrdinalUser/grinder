@@ -24,7 +24,10 @@ void scene_init(scene_data_t scene_data) {
     ecs = app.GetECS();
     vfs = app.GetVFS();
     Ref<ResourceSystem> rs = app.GetResourceSystem();
+    auto renderer = app.GetRenderer();
     auto module_name = string(scene_data.module_name);
+
+    renderer->LoadSkybox(vfs->Resolve(module_name, "assets/skybox_clouds_adjusted"));
 
     // Setup camera
     camera = ecs->CreateEntity3D(null, Component::Transform(), "Main Camera");

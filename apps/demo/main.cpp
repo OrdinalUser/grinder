@@ -1615,16 +1615,13 @@ extern "C" {
     void scene_init(scene_data_t scene_data) {
         // Scene preamble
         Application& app = Application::Get();
-
-        auto renderer = app.GetRenderer();
-
-        // This loads: skybox/right.png, left.png, top.png, etc.
-        // renderer->SetSkybox("skybox/");
+        auto module_name = string(scene_data.module_name);
         ecs = app.GetECS();
         vfs = app.GetVFS();
         Ref<ResourceSystem> rs = app.GetResourceSystem();
-        auto module_name = string(scene_data.module_name);
+        auto renderer = app.GetRenderer();
 
+        renderer->LoadSkybox(vfs->Resolve(module_name, "assets/skybox_clouds_adjusted"));
         renderer->SetClearColor(Color{ 0.0, 0.0, 0.0, 1.0 });
 
         entity_id sun = ecs->CreateEntity3D(null, Transform(), "Sun");

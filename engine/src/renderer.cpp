@@ -294,6 +294,10 @@ namespace Engine {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_lightsSSBO);
         glBufferData(GL_SHADER_STORAGE_BUFFER, LightConfig.MAX_LIGHTS_GLOBAL * sizeof(GPU_LightData), nullptr, GL_DYNAMIC_DRAW);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+        // Do skybox stuff
+        m_skyboxShader = rs->load<Shader>(vfs->GetEngineResourcePath("assets/shaders/skybox"));
+        CreateSkybox();
     }
 
     ENGINE_API Renderer::~Renderer() {
@@ -314,6 +318,9 @@ namespace Engine {
         m_Framebuffer = nullptr;
         m_screenQuadVAO = 0;
         m_screenQuadVBO = 0;
+        if (m_skyboxVAO) glDeleteVertexArrays(1, &m_skyboxVAO);
+        if (m_skyboxVBO) glDeleteBuffers(1, &m_skyboxVBO);
+        if (m_skyboxCubemap) glDeleteTextures(1, &m_skyboxCubemap);
     }
 
     void Renderer::SetCamera(Transform* transform, Camera* camera) {
@@ -434,9 +441,11 @@ namespace Engine {
         
         BeginFramebufferPass();
 
-        // Depth Prepass
         glClearColor(m_glState.clearColor.r, m_glState.clearColor.g, m_glState.clearColor.b, m_glState.clearColor.a);
-        glClear(GL_DEPTH_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        
+
+        // Depth Prepass
         glEnable(GL_DEPTH_TEST);
         glDepthMask(GL_TRUE);
         glDepthFunc(GL_LESS);
@@ -444,10 +453,25 @@ namespace Engine {
         DrawDepthPrepass();
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         // glDepthMask(GL_FALSE); // this comment made it work? but isn't that like the point of a depth prepass?
+        
+        // glDepthFunc(GL_LESS);
+        // glDepthMask(GL_FALSE);
+        // glDisable(GL_CULL_FACE);
+        // DrawSkybox();
+
+        glDepthMask(GL_FALSE);
+        glDisable(GL_CULL_FACE);
+        glDepthFunc(GL_LEQUAL); // allow fragments at far plane to pass
+        DrawSkybox();
+        // restore state
+        glEnable(GL_CULL_FACE);
+        glDepthMask(GL_TRUE);
         glDepthFunc(GL_EQUAL);
 
+        // glEnable(GL_CULL_FACE);
+        // glDepthMask(GL_TRUE);
+        // glDepthFunc(GL_EQUAL);
         // Render opaque geometry
-        glClear(GL_COLOR_BUFFER_BIT);
         DrawOpaque();
 
         // Render transparent geometry
@@ -723,6 +747,146 @@ namespace Engine {
 
         glBindVertexArray(0);
         glEnable(GL_DEPTH_TEST);
+    }
+
+    // Create cube geometry and VAO/VBO for the YBybox
+    void Renderer::CreateSkybox() {
+        // 36 verts (positions only) for a cube
+        static const float skyboxVertices[] = {
+            // positions
+            -1.0f,  1.0f, -1.0f,
+            -1.0f, -1.0f, -1.0f,
+             1.0f, -1.0f, -1.0f,
+             1.0f, -1.0f, -1.0f,
+             1.0f,  1.0f, -1.0f,
+            -1.0f,  1.0f, -1.0f,
+
+            -1.0f, -1.0f,  1.0f,
+            -1.0f, -1.0f, -1.0f,
+            -1.0f,  1.0f, -1.0f,
+            -1.0f,  1.0f, -1.0f,
+            -1.0f,  1.0f,  1.0f,
+            -1.0f, -1.0f,  1.0f,
+
+             1.0f, -1.0f, -1.0f,
+             1.0f, -1.0f,  1.0f,
+             1.0f,  1.0f,  1.0f,
+             1.0f,  1.0f,  1.0f,
+             1.0f,  1.0f, -1.0f,
+             1.0f, -1.0f, -1.0f,
+
+            -1.0f, -1.0f,  1.0f,
+            -1.0f,  1.0f,  1.0f,
+             1.0f,  1.0f,  1.0f,
+             1.0f,  1.0f,  1.0f,
+             1.0f, -1.0f,  1.0f,
+            -1.0f, -1.0f,  1.0f,
+
+            -1.0f,  1.0f, -1.0f,
+             1.0f,  1.0f, -1.0f,
+             1.0f,  1.0f,  1.0f,
+             1.0f,  1.0f,  1.0f,
+            -1.0f,  1.0f,  1.0f,
+            -1.0f,  1.0f, -1.0f,
+
+            -1.0f, -1.0f, -1.0f,
+            -1.0f, -1.0f,  1.0f,
+             1.0f, -1.0f, -1.0f,
+             1.0f, -1.0f, -1.0f,
+            -1.0f, -1.0f,  1.0f,
+             1.0f, -1.0f,  1.0f
+        };
+
+        if (m_skyboxVAO == 0) {
+            glGenVertexArrays(1, &m_skyboxVAO);
+            glGenBuffers(1, &m_skyboxVBO);
+        }
+
+        glBindVertexArray(m_skyboxVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, m_skyboxVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0); // attribute 0 = position (vec3)
+        glEnableVertexAttribArray(0);
+
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+
+    void Engine::Renderer::LoadSkybox(const path filepath, const std::string ext) {
+        LoadSkybox({
+            filepath / ("px" + ext),
+            filepath / ("nx" + ext),
+            filepath / ("py" + ext),
+            filepath / ("ny" + ext),
+            filepath / ("pz" + ext),
+            filepath / ("nz" + ext),
+        });
+    }
+
+    void Renderer::LoadSkybox(const array<std::filesystem::path, 6>& faces) {
+        m_skyboxCubemap = LoadCubemap(faces);
+    }
+
+    GLuint Renderer::LoadCubemap(const array<std::filesystem::path, 6>& faces) {
+        Ref<ResourceSystem> rs = Application::Get().GetResourceSystem();
+
+        GLuint texID = 0;
+        glGenTextures(1, &texID);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, texID);
+
+        for (unsigned int i = 0; i < faces.size(); ++i) {
+            // Load image through ResourceLoader::load<Image>
+            // Use LoadCfg::Image to avoid gamma (we can keep SRGB behavior if desired)
+            auto img = rs->load<Image>(faces[i], LoadCfg::Image{ .format = LoadCfg::ColorFormat::Auto, .flip_vertically = false });
+            if (!img || !img->data) {
+                Log::warn("Skybox: failed to load face {}", faces[i].string());
+                continue;
+            }
+
+            GLenum format = (img->channels == 4) ? GL_RGBA : GL_RGB;
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, format, img->width, img->height, 0, format, GL_UNSIGNED_BYTE, img->data);
+            // Note: ResourceSystem caches the Image so img->data remains valid while shared_ptr alive.
+        }
+
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        return texID;
+    }
+
+    // Draw the skybox cube sampling the cubemap
+    void Renderer::DrawSkybox() {
+        if (!m_skyboxShader || m_skyboxCubemap == 0) return;
+        if (!m_camera) return;
+
+        // Use skybox shader
+        m_skyboxShader->Enable();
+
+        // Remove translation from view matrix so skybox appears infinitely far
+        mat4 view = m_camera->viewMatrix;
+        view[3] = vec4(0.0f, 0.0f, 0.0f, view[3].w); // zero translation row/column - keep orientation
+        // The project uses camera->projectionMatrix already available in Camera object
+        if (m_camera) {
+            m_skyboxShader->SetUniform("uProjection", m_camera->projectionMatrix);
+        }
+        m_skyboxShader->SetUniform("uView", view);
+
+        // Bind cubemap
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, m_skyboxCubemap);
+        m_skyboxShader->SetUniform("uSkybox", 0);
+
+        // Draw cube
+        glBindVertexArray(m_skyboxVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
     }
 
     void Renderer::SetClearColor(const Color clearColor) {
